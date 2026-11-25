@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сценарій уроку — Острів суперсил</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2A5A;--muted:#5B6690;--accent:#6C4DFF;--red:#C8323C;--line:#DCE0EA;--head:'Unbounded','Arial Black',system-ui,sans-serif;--text:'Golos Text',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#EEF1F7;color:var(--navy);font:15px/1.5 var(--text)}
+.bar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.bar h1{font:700 17px var(--head);margin:0;flex:1;min-width:260px}
+.sw{display:flex;border:1.5px solid var(--navy);border-radius:999px;overflow:hidden}
+.sw button{font:700 14px var(--text);border:0;background:#fff;padding:7px 14px;cursor:pointer;color:var(--navy)}
+.sw button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.wrap{max-width:960px;margin:0 auto;padding:18px 18px 60px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:16px}
+h2{font:700 18px var(--head);margin:0 0 10px}
+h3{font:800 15px var(--text);margin:12px 0 4px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{border-bottom:1px solid #E3E7F0;padding:5px 6px;text-align:left;vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.st-head{display:flex;align-items:center;gap:12px}
+.st-head .ic{font-size:30px}.st-head h2{flex:1;margin:0}
+.time{font:700 13px var(--head);background:#FFC93C;border:1.5px solid var(--navy);border-radius:999px;padding:2px 12px}
+.step{border-top:1px dashed var(--line);padding-top:8px;margin-top:10px}
+.say{border-left:5px solid var(--accent);background:#F6F4FF;border-radius:0 10px 10px 0;padding:8px 14px;font-size:17px;font-weight:600;margin:4px 0}
+.lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:14px;margin-top:6px}
+.cols>div{background:#F4F6FB;border-radius:8px;padding:6px 9px}.cols .check{grid-column:1/-1;background:#EEF7F1}
+.dont{color:var(--red)}
+.note{font-size:13px;color:var(--muted)}
+ul{margin:4px 0;padding-left:20px}
+img.emoji{height:1em;width:1em;margin:0 .05em;vertical-align:-0.12em}
+@media (max-width:720px){.cols{grid-template-columns:1fr}}
+@media print{
+  @page{size:A4;margin:12mm}
+  body{background:none;font-size:12px}.bar{position:static;border:0}.sw{display:none}
+  .card{break-inside:avoid;page-break-inside:avoid;border:1.5px solid #999;margin-bottom:10px;padding:10px 12px}
+  .say{background:none;font-size:13.5px}.time{background:none}.wrap{max-width:none;padding:0}
+}
+</style>
+</head>
+<body>
+<div class="bar"><h1>🏝️ Острів суперсил — сценарій уроку для МІКа <span class="note" id="cur"></span></h1>
+  <div class="sw" id="swg"><button data-g="78">7–8 років</button><button data-g="910">9–10 років</button></div>
+</div>
+<div class="wrap" id="out"></div>
+<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="core.js"></script>
+<script>
+/* Статичний сценарій: усі тексти беруться з config.js, тож не розходяться з пультом і грою. */
+let G = '78';
+try { G = localStorage.getItem('ostriv-scen-g') || '78'; } catch (e) { }
+const E = s => esc(String(s ?? '')).replace(/\{([^{}|]*)\|([^{}|]*)\}/g, '$1($2)');   // рід: «мрія(в)(ла)» — МІК обирає форму
+const P = v => pick78(v, G);
+const CC = key => { const V = CONFIG.content[key] || {}; return Object.assign({}, V, V[G] || {}); };
+const STEPS = {
+  hero: ['pick'],
+  emotions: { '78': ['intro', 'frames', 'calmReady', 'calm'], '910': ['intro', 'frames', 'caseIntro', 'calmReady', 'calm'] },
+  safe: ['intro', 'warm', 'hard'],
+  money: { '78': ['intro', 'picnic', 'exactIntro', 'exact'], '910': ['intro', 'picnic', 'deal'] },
+  hike: { '78': ['intro', 'pack', 'bridge'], '910': ['intro', 'plan', 'rain', 'replan'] },
+  bob: { '78': ['intro', 'talk', 'trade', 'bye'], '910': ['intro', 'talk', 'trade', 'haggle', 'bye'] },
+  playground: { '78': ['intro', 'rules', 'judge'], '910': ['intro', 'compromise', 'chat', 'why'] },
+  radio: { '78': ['intro', 'guest', 'q', 'ask'], '910': ['intro', 'guest', 'q', 'ask', 'opinion'] },
+  final: ['batteries', 'crown']
+};
+const CODES = { emotions: () => ['calm'], bob: g => (g === '910' ? ['bobTalk', 'bobHaggle'] : ['bobTalk']), playground: g => (g === '78' ? ['judge'] : ['chatWhy']),
+  radio: g => (g === '910' ? ['radioAnswer', 'radioAsk', 'radioOpinion'] : ['radioAnswer', 'radioAsk']) };
+function codesTable(key) {
+  const c = CONFIG.codes[key];
+  return `<h3>Коди: ${E(c.title)}</h3><table><tr><th style="width:34%">Кнопка на пульті</th><th>Приклади відповідей</th></tr>${c.items.map(i => `<tr><td><b>${E(i.label)}</b></td><td>${(i.ex || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`;
+}
+function contentBlock(key) {
+  const C = CC(key), Th = CONFIG.thresholds;
+  if (key === 'emotions') return (G === '78'
+    ? `<h3>Комікси (МІК читає підписи)</h3><ul>${C.comics.map(c => `<li><b>${E(c.title)}${c.warm ? ' (розминка)' : ''}:</b> ${c.frames.map(f => E(f.caption)).join(' → ')}</li>`).join('')}</ul>`
+    : `<h3>Історії (дитина читає сама)</h3><ul>${C.cases.map(c => `<li><b>${E(c.title)}${c.warm ? ' (розминка)' : ''}.</b> ${E(c.text)}<br><span class="note">${c.frames.map(f => E(f.question)).join(' / ')}</span>${c.mask ? '<br><span class="note">Перед цією історією — «Ти обиратимеш дві речі: що герой показує іншим і що відчуває насправді». Спершу «показує» (світла рамка з усмішкою-маскою), потім «насправді» (сірий силует).</span>' : ''}</li>`).join('')}</ul>`)
+    + `<p class="note">Рівень за кадрами: від ${Math.round(Th.emotions.frames.l3 * 100)}% балів — 3, від ${Math.round(Th.emotions.frames.l2 * 100)}% — 2. «Що допоможе заспокоїтися?» — ${Th.emotions.calmSec} с; таймер бачиш лише ти.</p>`;
+  if (key === 'safe') return `<p class="note"><b>Замок 1 — розминка:</b> ${C.warm.slots} фрукти з ${C.warm.fruits.length} (${C.warm.fruits.join(' ')}). Без таймера, не оцінюється, можна пояснювати кольори. <b>Замок 2 — складніший:</b> ${C.hard.slots} фрукти з ${C.hard.fruits.length} (${C.hard.fruits.join(' ')}). Таймер ${Th.safe.hardSec / 60} хв бачиш лише ти. Проби рахуються на замку 2: «зупинилась раніше ${Th.safe.stopSec} с» — слабкий сигнал наполегливості; «застрягла» = ${Th.safe.stuckAfter} спроби поспіль без нового зеленого.</p>`;
+  if (key === 'money') return G === '78'
+    ? `<p class="note"><b>Пікнік за ${C.budget} монет:</b> ${C.goods.map(g => `${g.e} ${E(g.name)} (${g.price})`).join(', ')}. Кожен товар можна взяти один раз; рівень — за тим, чи є їжа й вода. <b>Без решти:</b> у сови зламалася каса. Дитина викладає на тарілку монетки ${C.coins.join(' / ')} і тисне «Заплатити»: ${C.targets.map(t => `${t.e} ${E(t.name.toLowerCase())} — ${t.sum}`).join(', ')}. Точно — товар у кошик, інакше сова просто каже «Дякую!». Рівень — за кількістю точних оплат.</p>`
+    : `<p class="note"><b>Пікнік за ${C.budget} грн:</b> ${C.goods.map(g => `${g.e} ${E(g.name)} (${g.price})`).join(', ')}. <b>Що вигідніше?</b> ${C.deals.map(d => E(d.text)).join(' · ')} Решту дитина називає, ти вводиш на клавіатурі пульта.</p>`;
+  if (key === 'hike') return G === '78'
+    ? `<p class="note">Прогноз: ${E(C.forecast.text)}. Речі: ${C.items.map(i => E(i.name.toLowerCase())).join(', ')}. Шляхи: ${C.routes.map(r => `${E(r.name.toLowerCase())} (${r.suns}☀️)`).join(', ')}.</p>`
+    : `<p class="note">Справи: ${C.blocks.map(b => `${E(b.name.toLowerCase())} (${b.dur} год)`).join(', ')}. Правила: ${Object.values(C.rules).map(E).join('; ')}. Несподіванка: ${E(C.rain.text)}.</p>`;
+  if (key === 'playground') return G === '78'
+    ? `<p class="note"><b>Правила:</b> ${C.cards.map(c => `«${E(c.text)}»`).join(', ')}. <b>Суддя:</b> суперечка за ${E(C.judge.about)} — Мія: «${E(C.judge.mia)}», Тім: «${E(C.judge.tim)}».</p>`
+    : `<p class="note"><b>Компроміс (розминка):</b> Котики — ${E(C.teams.cats.wishes.join(', ').toLowerCase())}; Лисички — ${E(C.teams.foxes.wishes.join(', ').toLowerCase())}. <b>Чат класу «${E(C.chat.title)}»:</b> ${E(C.chat.situation)} Три повідомлення, на кожне — два варіанти (звинувачення або я-повідомлення), потім «Чому ти обра(в)(ла) саме так?». Рівень: 3 з 3 я-повідомлень і пояснення через почуття — 3; 2 з 3 або 3 без пояснення — 2; інакше — 1.</p>`;
+  if (key === 'radio') return `<p class="note"><b>Таємний гість:</b> спитай про улюбленого героя з мультика, гри чи книжки й впиши ім’я на пульті (до 30 символів). У грі з’явиться наш силует у плащі й масці з табличкою імені — жодних зображень відомих персонажів. «Без імені» — питає ведуча Іскра.</p><p class="note">Ім’я гостя не відмінюємо: «[гість] питає…», «[гість] уважно слухає».</p>
+    <h3>Питання інтерв’ю — шпаргалки</h3><table><tr><th style="width:36%">Питання на екрані</th><th>Якщо мовчить</th><th>Якщо говорить довго</th></tr>${C.questions.map(q => `<tr><td>${E(fill(q.q, { guest: '[гість]' }))}</td><td>${E(q.quiet)}</td><td>${E(q.wrap)}</td></tr>`).join('')}</table>
+    <h3>Як відповісти від імені гостя (коли дитина ставить питання)</h3><p><b>${E(fill(C.help.template, { guest: '[гість]' }))}</b></p><ul>${C.help.answers.map(x => `<li><b>${E(x.about)}:</b> ${E(x.a)}</li>`).join('')}</ul><p class="note">Закрити розмову: ${E(fill(C.help.close, { guest: '[гість]' }))}</p>${G === '910' ? `<p class="note">Теми «Думки за 30 секунд»: ${C.topics.map(t => `«${E(t)}»`).join(', ')}.</p>` : ''}`;
+  if (key === 'bob') return `<p class="note">${E(CONFIG.lore.bob || '')} Інвентар дитини: ${C.items.map(i => `${i.e} ${E(i.name)} — ${E(i.note || '')}`).join('; ')}. Після двох «Вимагає» Боб іде; максимум ${C.maxReplies} реплік. Плащ Боб дарує за будь-якого результату.</p>
+    <h3>Що сказати після кожної репліки Боба</h3><table><tr><th style="width:38%">Боб каже на екрані</th><th>Скажи дитині</th></tr>${Object.entries(CONFIG.script.bob.react).filter(([k]) => C.lines[k] || k === 'wish').map(([k, t]) => { const line = k === 'wish' ? C.wish.text : C.lines[k]; return `<tr><td>«${E(line)}»</td><td>${E(fill(t, { line: '…' }))}</td></tr>`; }).join('')}</table>`;
+  if (key === 'final') return `<p class="note">Батарейки — по черзі лише для навичок, які оцінено (пропущені станції пропускаються). На екрані — повне питання й маленька картинка станції.</p><ul>${CONFIG.skills.map(s => `<li>${E(s.selfQ)}</li>`).join('')}</ul>`;
+  return '';
+}
+function itemsOf(key, st) {
+  const C = CC(key), gq = '[ім’я героя]';
+  if (key === 'emotions' && st === 'frames') { const F = emFrames({ g: G, C }); return F.map((f, i) => ({ label: `Кадр ${i + 1} з ${F.length} · «${f.title}»${f.warm ? ' (розминка)' : ''}. На екрані: ${f.sit || ''} — ${f.q || ''}`, v: { say: f.say || '' } })); }
+  if (key === 'money' && st === 'exact') return C.targets.map((t, i) => ({ label: `Покупка ${i + 1}: ${t.e} ${t.name} — ${t.sum} монет`, v: { say: t.say } }));
+  if (key === 'money' && st === 'deal') return C.deals.map((d, i) => ({ label: `Завдання ${i + 1}: ${d.q || d.text}`, v: { say: d.say } }));
+  if (key === 'playground' && st === 'chat') return C.chat.messages.map((m, i) => ({ label: `Повідомлення ${i + 1} — ${m.from}: «${m.text}»`, v: { say: m.say } }));
+  if (key === 'radio' && st === 'q') return C.questions.map((q, i) => ({ label: `Питання ${i + 1}`, v: { say: fill(q.say, { guest: gq }), quiet: q.quiet, wrap: q.wrap } }));
+  return null;
+}
+function vars(key, st) {
+  const C = CC(key);
+  const v = { title: '[назва]', caption: '[підпис кадру]', question: '[питання]', text: '', item: '[товар]', price: '[ціна]', guest: '[ім’я героя / Іскра]', selfQ: '[питання про навичку]' };
+  if (key === 'hike' && G === '78') v.text = C.forecast.text;
+  if (key === 'bob') v.text = st === 'haggle' ? C.lines.haggle : C.need.name;
+  if (key === 'playground' && G === '78') v.text = C.judge.about;
+  return v;
+}
+const F = [['check', 'Що перевіряємо'], ['expect', 'Чого очікувати'], ['do', 'Що робиш ти'], ['quiet', 'Якщо дитина мовчить або думає довго'], ['active', 'Якщо дуже активна й говорить довго'], ['dont', 'Не кажи / не роби']];
+function stepHTML(x, vv) {
+  if (!x) return '';
+  const cells = F.filter(([k]) => P(x[k])).map(([k, l]) => `<div class="${k === 'check' ? 'check' : ''}${k === 'dont' ? ' dont' : ''}"><div class="lbl"${k === 'dont' ? ' style="color:var(--red)"' : ''}>${l}</div>${E(fill(P(x[k]), vv))}</div>`).join('');
+  return `<div class="step"><div class="lbl">Скажи дитині</div><div class="say">${E(fill(P(x.say), vv))}</div><div class="cols">${cells}</div></div>`;
+}
+function station(key) {
+  const L = CONFIG.locations[key], steps = P(STEPS[key]), sc = CONFIG.script[key], sk = CONFIG.skills.find(s => s.key === key);
+  const stepsHtml = steps.map(st => {
+    // кроки, де фраза своя для кожного кадру / покупки / завдання / повідомлення / питання
+    const items = itemsOf(key, st);
+    if (items) return items.map((it, i) => `<div class="note" style="margin-top:10px"><b>${E(it.label)}</b></div>` + (i === 0 ? stepHTML(sc[st], Object.assign(vars(key, st), it.v)) : stepHTML({ say: sc[st].say, quiet: key === 'radio' ? sc[st].quiet : '', active: key === 'radio' ? sc[st].active : '' }, Object.assign(vars(key, st), it.v)))).join('');
+    return stepHTML(sc[st], vars(key, st));
+  }).join('');
+  const codes = (CODES[key] ? CODES[key](G) : []).map(codesTable).join('');
+  const probes = sk ? `<p class="note">Навичка: <b>${E(sk.area)}</b>. Проби: ${probeNames(key, G).filter(p => p !== '—').map(E).join(' · ')}.</p>` : '';
+  const lore = CONFIG.lore[key] ? `<p class="note">Заставка в грі: «${E(CONFIG.lore[key])}»</p>` : '';
+  return `<div class="card"><div class="st-head"><span class="ic">${L.icon}</span><h2>${E(L.name)}</h2><span class="time">${L.minutes} хв</span></div>${probes}${lore}${contentBlock(key)}${stepsHtml}${codes}
+    ${key !== 'hero' && key !== 'final' ? `<div class="step"><div class="say">${E(CONFIG.script.done.say)}</div><div class="note">Після кожної локації: ${E(CONFIG.script.done.do)} Предмет костюма видається завжди, навіть якщо станцію пропущено.</div></div>` : ''}</div>`;
+}
+function render() {
+  document.querySelectorAll('#swg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.g === G));
+  document.getElementById('cur').textContent = `· ${CONFIG.groups[G].label}`;
+  const timing = CONFIG.order.map(k => `<tr><td>${CONFIG.locations[k].icon} ${E(CONFIG.locations[k].name)}</td><td>${CONFIG.locations[k].minutes} хв</td></tr>`).join('');
+  const total = CONFIG.order.reduce((a, k) => a + CONFIG.locations[k].minutes, 0);
+  document.getElementById('out').innerHTML = `
+  <div class="card"><h2>Таймінг</h2><table>${timing}<tr><td><b>Разом</b></td><td><b>${total} хв (план — до ${CONFIG.planMinutes})</b></td></tr></table></div>
+  <div class="card"><h2>Загальні правила</h2><ul>
+    <li>Нейтральні фрази: «Записала», «Дякую, далі», «Прийнято», «Цікаво!».</li>
+    <li>Не підказуй і не повторюй відповідь дитини оцінною інтонацією. Не порівнюй з іншими дітьми.</li>
+    <li>«Дитина попросила підказку» і «Дитина зупинилась» — лише з ініціативи дитини.</li>
+    <li>Хвали зусилля, а не результат. Під час уроку на пульті немає балів — вони з’являться лише у звіті.</li>
+    <li>На екрані гри дитина бачить коротке питання чи завдання великим шрифтом — без підказок і відповідей. Таймери бачиш лише ти.</li>
+    <li>Тексти на кшталт «мрія(в)(ла)» читай у роді дитини.</li></ul></div>
+  <div class="card"><h2>Технічна пам’ятка</h2><ol>
+    <li>Відкрий <b>pult.html</b> — це пульт МІКа, дитина його не бачить.</li>
+    <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
+    <li>Натисни «Відкрити вікно гри». Якщо браузер його заблокував — дозволь спливні вікна або відкрий index.html вручну в тому самому браузері.</li>
+    <li>Коли на пульті «Вікно гри підключено»: ${E(CONFIG.meetHint)} Щоб у грі був звук, один раз клікни у вікні гри до демонстрації.</li>
+    <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії, Ctrl+Z — «Стерти останнє».</li>
+    <li>Після фіналу звіт для батьків відкривається на пульті: там «Зберегти PDF» і статус надсилання в таблицю.</li></ol></div>
+  ${CONFIG.order.map(station).join('')}`;
+  emojify(document.body);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.g) G = b.dataset.g;
+  try { localStorage.setItem('ostriv-scen-g', G); } catch (er) { }
+  render();
+});
+render();
+</script>
+</body>
+</html>
