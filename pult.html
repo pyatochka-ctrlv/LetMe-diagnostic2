@@ -73,6 +73,19 @@ details.how summary{cursor:pointer;font-weight:800}
 .hint{font-size:13px;color:var(--muted)}
 .cheat{margin-top:12px;background:#FFF8E1;border:1px solid #F1D27A;border-radius:12px;padding:10px 14px;font-size:14px}.cheat p{margin:4px 0 8px}.cheat ul{margin:4px 0 8px;padding-left:18px}
 img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
+.tops{font-size:12px;color:var(--muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* теми діагностики */
+.say.small p{font-size:17px}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tcard{display:flex;gap:10px;align-items:flex-start;text-align:left;font:inherit;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+.tcard:hover{background:var(--soft)}
+.tcard.on{border-color:var(--accent);background:#F3F0FF;outline:2px solid var(--accent)}
+.tcard .tbox{flex:none;display:grid;place-items:center;width:22px;height:22px;border:2px solid var(--navy);border-radius:6px;font-weight:800;color:#fff;margin-top:1px}
+.tcard.on .tbox{background:var(--accent);border-color:var(--accent)}
+.tcard .tt{display:flex;flex-direction:column;gap:2px}.tcard .tt b{font-size:15px}.tcard .tt span{font-size:13.5px}
+.tcard .tmeta{color:var(--muted);font-size:12px !important}
+.tsum{margin-top:10px;font-weight:800;font-size:16px}
+.tcore{margin-top:8px;font-size:13px;color:var(--muted)}
 .noti{background:#FFF6DA;border:1px solid #F1D27A;border-radius:10px;padding:10px 12px;font-size:14px}
 /* ---------- звіт: веб-сторінка зі скролом ---------- */
 .rp-top{position:sticky;top:56px;z-index:5;background:#fff;border:1px solid var(--line);border-radius:0 0 12px 12px;max-width:900px;margin:0 auto 12px;padding:10px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 4px 14px rgba(30,42,90,.06)}
@@ -108,6 +121,12 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 .rp-note{font-size:12.5px;color:#6B7393}
 .rp-legend{display:flex;gap:14px;font-size:12px;color:#4A5378;margin-top:6px;flex-wrap:wrap}
 .radar{width:100%;height:auto}
+.bars{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.bar .bn{font-weight:700;font-size:14px}.bar .bl{font-size:12.5px;color:#4A5378}
+.bar .bs{display:flex;gap:4px;margin:3px 0}.bar .bs i{flex:1;height:14px;border-radius:4px;background:#EEF0F6;border:1px solid #DCE0EA}
+.bar .bs i.on1{background:#F5A3A3}.bar .bs i.on2{background:#FFD866}.bar .bs i.on3{background:#6FCF97}
+.rp-more li{margin-bottom:4px}
+.rp-skill .hd .rp-note{margin-left:2px}
 .rp-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px auto 0;max-width:900px}
 /* компактний режим для html2pdf (html2canvas не застосовує @media print) */
 .rp.pdf{border:0;padding:0 2px;font-size:12px;line-height:1.36;width:auto;max-width:none}
@@ -115,6 +134,7 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 .rp.pdf section{margin-top:12px}
 .rp.pdf .rp-profile{grid-template-columns:190px minmax(0,1fr);gap:10px}
 .rp.pdf .radar{width:190px;height:168px}
+.rp.pdf .bars{gap:5px}.rp.pdf .bar .bs i{height:9px}
 .rp.pdf .rp-profile table{font-size:10.5px}.rp.pdf td{padding:2px 4px;line-height:1.3}.rp.pdf th{padding:3px 4px;font-size:9.5px}
 .rp.pdf .lv{font-size:10px;padding:0 4px}
 .rp.pdf .rp-skills{display:grid;grid-template-columns:1fr 1fr;column-gap:18px}
@@ -153,6 +173,7 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 <header class="hdr">
   <h1>Пульт МІКа</h1><span class="warn">не демонструвати</span>
   <span class="conn" id="conn"><i></i><span>Вікно гри не знайдено</span></span>
+  <span class="tops" id="tops"></span>
   <details class="memo"><summary>Пам’ятка</summary><div id="memo"></div></details>
   <div class="menu" id="menu"></div>
 </header>
@@ -163,7 +184,12 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 <script src="core.js"></script>
 <script>
 let S = SYNC.load() || freshState();
-const ui = { lastPing: 0, arm: null, armT: null, menu: false, ex: {}, view: null, lastT: 0, blocked: false, undo: [] };
+if (!Array.isArray(S.setup.topics)) S.setup.topics = [];
+const ui = { lastPing: 0, arm: null, armT: null, menu: false, ex: {}, view: null, lastT: 0, blocked: false, undo: [], topicWarn: false, twT: null };
+// pult.html?topics=druzhba,vpevnenist — теми з форми запису одразу відмічені (лише на екрані налаштувань)
+const URL_TOPICS = parseTopicsParam(location.search);
+function applyUrlTopics() { if (URL_TOPICS && S.phase === 'setup') S.setup.topics = URL_TOPICS.slice(); }
+applyUrlTopics();
 const $ = q => document.querySelector(q);
 const T = s => tplG(s, S.setup.gender);
 const ctx = () => ctxOf(S, S.cur);
@@ -177,7 +203,8 @@ function armed(key) {
 const armLabel = (key, label) => (ui.arm === key ? 'Точно? Натисни ще раз' : label);
 function commit() { SYNC.publish(S); render(); }
 const connected = () => Date.now() - ui.lastPing < 2600;
-const setupOk = () => { const s = S.setup; return !!(s.name.trim() && s.surname.trim() && s.group && s.age && s.gender); };
+const childOk = () => { const s = S.setup; return !!(s.name.trim() && s.surname.trim() && s.group && s.age && s.gender); };
+const setupOk = () => childOk() && topicsOk(S.setup);
 $('#memo').textContent = CONFIG.meetHint + ' Пульт і гра мають бути відкриті в одному браузері на одному комп’ютері.';
 
 /* ---------- синхронізація ---------- */
@@ -189,6 +216,7 @@ SYNC.init('pult', m => {
 
 /* ---------- шапка ---------- */
 function renderHeader() {
+  $('#tops').textContent = S.phase !== 'setup' ? 'Теми: ' + chosenNames(S).join(', ') : '';
   const c = $('#conn'); c.classList.toggle('on', connected()); c.querySelector('span').textContent = connected() ? 'Вікно гри підключено' : 'Вікно гри не знайдено';
   $('#menu').innerHTML = g('menu', '⋯', { title: 'Меню' }) + (ui.menu ? `<div class="pop">
     ${g('reset', armLabel('reset', '↺ Нова діагностика'), { cls: ui.arm === 'reset' ? 'arm' : '' })}
@@ -210,12 +238,28 @@ function viewSetup() {
       <div class="frow"><span class="l">Вік <span class="req">*</span></span><div class="chips">${s.group ? CONFIG.groups[s.group].ages.map(a => chip('age', a, a)).join('') : '<span class="hint">спершу оберіть групу</span>'}</div></div>
       <div class="frow"><span class="l">Стать <span class="req">*</span></span><div class="chips">${chip('gender', 'm', 'Хлопчик')}${chip('gender', 'f', 'Дівчинка')}</div></div>
       </div></div>
+    ${viewTopics()}
     <div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${g('openGame', '↗ Відкрити вікно гри', { cls: connected() ? '' : 'primary' })}
       <span class="hint">${connected() ? '✓ Вікно гри підключено.' : 'Відкрий вікно гри.'} ${esc(CONFIG.meetHint)}</span></div>
       ${ui.blocked ? `<div class="noti" style="margin-top:10px">Браузер заблокував нове вікно. Дозволь спливні вікна для цієї сторінки або відкрий гру вручну: <a href="index.html" target="ostriv-game">index.html</a> (у тому самому браузері).</div>` : ''}</div>
     <div style="display:flex;justify-content:flex-end">${g('start', 'Почати урок →', { cls: 'primary big', disabled: !(setupOk() && connected()) })}</div>
-    <div class="hint" style="text-align:right">${!setupOk() ? 'Заповни обов’язкові поля (*). ' : ''}${!connected() ? '«Почати» стане активною, коли вікно гри буде підключено.' : ''}</div>
+    <div class="hint" style="text-align:right">${!childOk() ? 'Заповни обов’язкові поля (*). ' : ''}${!topicsOk(S.setup) ? esc(CONFIG.topicPick.minHint) + '. ' : ''}${!connected() ? '«Почати» стане активною, коли вікно гри буде підключено.' : ''}</div>
   </div>`;
+}
+
+// крок «Теми діагностики»: 6 карток-чекбоксів, від min до max тем, підсумок часу
+function viewTopics() {
+  const tp = CONFIG.topicPick, sel = normTopics(S.setup.topics), n = sel.length;
+  const cards = CONFIG.topics.map(t => { const on = sel.includes(t.key), L = CONFIG.locations[t.station];
+    return `<button class="tcard${on ? ' on' : ''}" data-g="topic" data-arg="${t.key}" role="checkbox" aria-checked="${on}"><span class="tbox">${on ? '✓' : ''}</span>
+      <span class="tt"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span><span class="tmeta">${L.icon} ${esc(L.name)} · ≈${L.minutes} хв · модуль «${esc(t.module)}»</span></span></button>`; }).join('');
+  const core = CONFIG.core.map(c => `${CONFIG.locations[c.station].icon} ${esc(CONFIG.locations[c.station].name)} (${esc(c.name)})`).join(', ');
+  return `<div class="panel"><h2 style="font:700 18px var(--head);margin:0 0 12px">${esc(tp.title)} <span class="req">*</span></h2>
+    <div class="say small"><div class="lbl">Скажи батькам</div><p>${esc(tp.say)}</p></div>
+    <div class="tgrid">${cards}</div>
+    ${ui.topicWarn ? `<div class="noti" style="margin-top:10px">${esc(tp.maxHint)}</div>` : ''}
+    <div class="tsum">Обрано ${n} з ${tp.max} · ${n ? esc(fill(tp.total, { n: planOf(routeOf(sel)) })) : esc(tp.minHint)}</div>
+    <div class="tcore">Проходять усі: ${core}.</div></div>`;
 }
 
 /* ---------- сценарій кроку ---------- */
@@ -225,8 +269,9 @@ function scriptVars() {
   if (key === 'emotions' && s.step === 'frames') { const f = emFrames(c)[s.fi]; Object.assign(v, { title: f.title, say: f.say || f.q || f.question || '' }); }
   if (key === 'money' && s.step === 'exact') { const t = c.C.targets[s.t]; if (t) Object.assign(v, { item: t.acc, price: t.sum, say: t.say || '' }); }
   if (key === 'money' && s.step === 'deal') { const d = c.C.deals[s.q] || {}; v.say = d.say || d.text || ''; }
+  if (key === 'hero') v.locs = routeLocs(S);
   if (key === 'hike' && gr === '78') v.text = c.C.forecast.text;
-  if (key === 'bob') { v.text = s.step === 'haggle' ? c.C.lines.haggle : c.C.need.name; v.line = T(ST.bob.lineText(s, c.C)); }
+  if (key === 'bob') { v.gift = giftAcc(S); v.text = s.step === 'haggle' ? c.C.lines.haggle : c.C.need.name; v.line = T(ST.bob.lineText(s, c.C)); }
   if (key === 'playground' && gr === '78') v.text = c.C.judge.about;
   if (key === 'playground' && s.step === 'chat') v.say = (c.C.chat.messages[s.ci] || {}).say || '';
   if (key === 'radio') { v.guest = guestName(s); if (s.step === 'q') { const Q = c.C.questions[s.qi] || {}; v.say = fill(Q.say || '', { guest: v.guest }); v.quiet = Q.quiet || ''; v.wrap = Q.wrap || ''; } }
@@ -352,6 +397,21 @@ IN.radio = s => {
     <div style="margin-top:10px">${codesBlock('radioOpinion', it => act('mark', it.id, it.label, { cls: s.marks.includes(it.id) ? 'sel' : '' }))}</div>`;
   return '';
 };
+// Перший крок — Дружба: коди лише на пульті (з еталонами — «Приклади»)
+IN.friend = s => {
+  const C = ctx().C, lab = it => `${esc(T(it.label))} <span class="hint">· ${it.v}</span>`;
+  const one = set => codesBlock(set, it => act('code', it.id, lab(it), { cls: s.p1 === it.id ? 'sel' : '' }));
+  if (s.step === 'join') return one('friendJoin');
+  if (s.step === 'no') return `<div class="info">Однолітка на екрані: «${esc(C.no)}»</div>` + codesBlock('friendNo', it => act('mark', it.id, lab(it), { cls: s.marks.includes(it.id) ? 'sel' : '' }));
+  if (s.step === 'enter') return `<div class="info">Розмова на екрані: ${C.talk.map(t => `«${esc(t)}»`).join(' — ')}</div>` + one('friendEnter');
+  if (s.step === 'pingReady' || s.step === 'ping') {
+    const P = C.peer;
+    const top = s.step === 'ping' ? `<div class="info">Час (видно лише тобі): ${s.running ? timerHTML(s.endsAt) : '<b>час вийшов</b>'} · зустрічних питань: <b>${s.q}</b>${s.share ? ' · ділиться своїм ✓' : ''}</div>` : `<div class="info">Репліка однокласника: «${esc(P.line)}»</div>`;
+    return top + codesBlock('friendPing', it => (it.id === 'ask' ? act('ask', undefined, '+1 зустрічне питання <span class="hint">(пробіл)</span>', { cls: 'big', disabled: s.step !== 'ping' }) : act('share', undefined, esc(it.label), { cls: s.share ? 'sel' : '' })))
+      + `<div class="cheat"><div class="lbl">Шпаргалка: як відповідати від імені однокласника</div><ul>${P.answers.map(x => `<li><b>${esc(x.about)}:</b> ${esc(T(x.a))}</li>`).join('')}</ul><div class="lbl">Щоб завершити</div><p>${esc(T(P.close))}</p></div>`;
+  }
+  return '';
+};
 IN.final = s => {
   if (s.step !== 'batteries') return '';
   const k = s.list[s.bi]; if (!k) return '<span class="hint">Немає оцінених навичок — «Далі».</span>';
@@ -361,11 +421,12 @@ IN.final = s => {
 /* ---------- урок ---------- */
 function stageList() {
   const lm = S.t.lessonStart ? Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000) : 0;
-  return `<div class="panel"><div class="lbl">Етапи</div><div class="stages">${ORDER.map(k => {
+  const R = routeOfS(S);
+  return `<div class="panel"><div class="lbl">Етапи</div><div class="stages">${R.map(k => {
     const s = S.st[k], L = CONFIG.locations[k], cur = k === S.cur && S.phase === 'lesson';
     const st = !s ? 'не почато' : s.skipped ? 'пропущено' : s.done ? 'пройдено' : 'триває';
     return `<div class="stg${cur ? ' cur' : ''}${s && s.done && !s.skipped ? ' done' : ''}${s && s.skipped ? ' skip' : ''}"><span>${L.icon} ${esc(L.name)} <span class="st">· ${st}</span></span><span class="st">${L.minutes} хв</span></div>`;
-  }).join('')}</div><div class="total" id="total">${lm} хв з ${CONFIG.planMinutes}</div></div>`;
+  }).join('')}</div><div class="total" id="total">${lm} хв з ≈${planOf(R)}</div></div>`;
 }
 function viewLesson() {
   const key = S.cur, s = curStation(S), M = ST[key], sc = scriptOf(), c = ctx();
@@ -388,98 +449,130 @@ function viewLesson() {
    ЗВІТ ДЛЯ БАТЬКІВ
    ===================================================================== */
 const RP = {
-  lv: l => (l ? `<span class="lv lv${l}">${CONFIG.levelColors[l]} ${CONFIG.levelNames[l]}</span>` : '<span class="lv lv0">⚪ Не оцінено</span>'),
+  lv: l => (l ? `<span class="lv lv${l}">${CONFIG.levelColors[l]} ${CONFIG.levelNames[l]}</span>` : ''),
   dots: n => (n ? `<span class="dots3">${'●'.repeat(n)}${'○'.repeat(3 - n)}</span>` : '<span class="rp-note">—</span>'),
   list: a => (a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' і ' + a[a.length - 1]),
-  name: k => skillOf(k).area.toLowerCase(),
+  name: k => topicName(k),
   measured: sk => pick78(sk.measured, S.setup.group),
-  probe: p => (p ? `${esc(p.short)} ${RP.lv(p.level)}` : '<span class="rp-note">пропущено</span>')
+  module: k => { const m = topicModule(k); return m ? fill(CONFIG.report.module, { module: m }) : ''; }
 };
-function radarSVG(L) {
-  const cx = 210, cy = 185, R = 118, K = SKILL_KEYS, n = K.length;
+// оцінені навички: спершу обрані теми (у порядку маршруту), потім базові. Невибрані й пропущені сюди не потрапляють.
+function rpAssessed(L) {
+  const ch = chosenStations(S), R = routeOfS(S).filter(k => SKILL_KEYS.includes(k));
+  return ch.filter(k => L[k].level).concat(R.filter(k => !ch.includes(k) && L[k].level));
+}
+// що робила дитина: лише проби з результатом (без «пропущено»)
+function rpProbes(k, r) {
+  const pn = probeNames(k, S.setup.group), li = [];
+  if (r.p1 && r.p1.level) li.push(`${esc(pn[0])}: ${esc(r.p1.ev)}`);
+  if (!r.single) { if (r.p2 && r.p2.level) li.push(`${esc(pn[1])}: ${esc(r.p2.ev)}`); else if (k === 'safe' && r.p1) li.push(`${esc(pn[1])}: ${esc(CONFIG.report.safeNoStuck)}`); }
+  return `<ul>${li.map(x => `<li>${x}</li>`).join('')}</ul>`;
+}
+// full — обрана тема (найдокладніше); інакше — базова навичка (коротше)
+function rpSkill(k, r, full) {
+  const sk = skillOf(k), Tx = sk.levels[r.level], mod = RP.module(k), nm = topicName(k);
+  const sub = nm !== sk.area ? `<span class="rp-note">навичка «${esc(sk.area)}»</span>` : '';
+  const rows = full
+    ? [['Навіщо це', esc(sk.about)], ['Що робила дитина', rpProbes(k, r)], ['Що означає рівень', esc(Tx.meaning)], ['Як це проявляється вдома й у школі', esc(Tx.life)],
+       ['Ідеї для дому (5–10 хв)', `<ul>${Tx.home.map(h => `<li>${esc(h)}</li>`).join('')}</ul>`], mod && ['Що розвиває на курсі', `${esc(nm)} → ${esc(mod)}`]]
+    : [['Що робила дитина', rpProbes(k, r)], ['Що означає рівень', esc(Tx.meaning)], ['Вправи вдома', `<ul>${Tx.home.map(h => `<li>${esc(h)}</li>`).join('')}</ul>`], mod && ['На курсі', `${esc(nm)} → ${esc(mod)}`]];
+  return `<div class="rp-skill" id="sk-${k}"><div class="hd"><h3>${esc(nm)}</h3>${RP.lv(r.level)}${sub}</div><dl>${rows.filter(Boolean).map(([a, z]) => `<dt>${a}</dt><dd>${z}</dd>`).join('')}</dl></div>`;
+}
+// радар — лише з оцінених навичок (від 3); інакше горизонтальні шкали
+function radarSVG(L, K) {
+  const cx = 210, cy = 185, R = 112, n = K.length;
   const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + Math.cos(a) * R * v / 3, cy + Math.sin(a) * R * v / 3]; };
+  const label = (t, x, y) => { const w = t.split(' '), lines = t.length > 14 && w.length > 1 ? [w.slice(0, Math.ceil(w.length / 2)).join(' '), w.slice(Math.ceil(w.length / 2)).join(' ')] : [t];
+    return `<text x="${x}" y="${y - (lines.length - 1) * 7}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="#1E2A5A" font-family="Golos Text, system-ui">${lines.map((l, i) => `<tspan x="${x}" dy="${i ? 14 : 0}">${esc(l)}</tspan>`).join('')}</text>`; };
   let svg = '';
   [1, 2, 3].forEach(r => { svg += `<polygon points="${K.map((_, i) => pt(i, r).join(',')).join(' ')}" fill="none" stroke="#DCE0EA"/>`; });
-  K.forEach((k, i) => { const [x, y] = pt(i, 3), [lx, ly] = pt(i, 3.6), off = !L[k].level;
-    svg += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#DCE0EA"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="${off ? '#A3AAC0' : '#1E2A5A'}" font-family="Golos Text, system-ui">${esc(skillOf(k).area)}${off ? '*' : ''}</text>`; });
+  K.forEach((k, i) => { const [x, y] = pt(i, 3), [lx, ly] = pt(i, 3.65); svg += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#DCE0EA"/>` + label(topicName(k), lx, ly); });
   const poly = (vals, attrs) => { const p = K.map((k, i) => (vals[k] ? pt(i, vals[k]) : null)).filter(Boolean); if (!p.length) return ''; if (p.length === 1) return `<circle cx="${p[0][0]}" cy="${p[0][1]}" r="4" ${attrs}/>`; return `<polygon points="${p.map(q => q.join(',')).join(' ')}" ${attrs}/>`; };
   const res = Object.fromEntries(K.map(k => [k, L[k].level]));
   svg += poly(res, 'fill="rgba(108,77,255,.12)" stroke="#6C4DFF" stroke-width="2.5" stroke-linejoin="round"');
-  K.forEach((k, i) => { if (res[k]) { const [x, y] = pt(i, res[k]); svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="#6C4DFF"/>`; } });
-  svg += poly(S.self, 'fill="none" stroke="#1E2A5A" stroke-width="1.8" stroke-dasharray="6 5" opacity=".75"');
-  return `<svg class="radar" width="420" height="370" viewBox="0 0 420 370" role="img" aria-label="Профіль навичок">${svg}</svg>`;
+  K.forEach((k, i) => { const [x, y] = pt(i, res[k]); svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="#6C4DFF"/>`; });
+  svg += poly(Object.fromEntries(K.map(k => [k, S.self[k]])), 'fill="none" stroke="#1E2A5A" stroke-width="1.8" stroke-dasharray="6 5" opacity=".75"');
+  return `<svg class="radar" width="420" height="370" viewBox="0 0 420 370" role="img" aria-label="Профіль навичок">${svg}</svg><div class="rp-legend"><span>— результат</span><span>- - самооцінка</span></div>`;
 }
-function rpSummary(L) {
-  const sw = strongWeak(L), out = [], min = lessonMinutes(S);
-  out.push(`${esc(S.setup.name)} пройш{ов|ла} ${sw.ev.length === 7 ? 'усі сім локацій' : `${sw.ev.length} із 7 локацій з оцінкою`}${min ? ` за ${min} хв` : ''}.`);
-  if (!sw.ev.length) return out.join(' ');
-  if (!sw.equal) {
-    out.push(`Найсильніше сьогодні проявились ${RP.list(sw.strong.slice(0, 2).map(RP.name))}: дитина ${RP.list(sw.strong.slice(0, 2).map(k => skillOf(k).strong))}.`);
-    out.push(`Найбільший простір для росту — ${RP.list(sw.weak.slice(0, 2).map(RP.name))}: ${RP.list(sw.weak.slice(0, 2).map(k => skillOf(k).grow))}.`);
-  } else out.push(CONFIG.report.evenStart);
+function barsHTML(L, K) {
+  return `<div class="bars" role="img" aria-label="Профіль навичок">${K.map(k => { const l = L[k].level, a = S.self[k];
+    return `<div class="bar"><div class="bn">${esc(topicName(k))}</div><div class="bs">${[1, 2, 3].map(i => `<i class="${i <= l ? 'on' + l : ''}"></i>`).join('')}</div><div class="bl">${esc(CONFIG.levelNames[l])}${a ? ` · самооцінка ${RP.dots(a)}` : ''}</div></div>`; }).join('')}</div>`;
+}
+function rpStrong(L) {
+  const sw = strongWeak(L), out = [];
+  if (!sw.ev.length) return '<p>Сильні сторони ми побачимо на курсі.</p>';
+  const top = sw.equal ? (sw.ev.length && L[sw.ev[0]].level >= 2 ? sw.ev : []) : sw.strong;
+  const ord = rpAssessed(L).filter(k => top.includes(k));
+  if (ord.length) out.push(`<ul>${ord.map(k => `<li><b>${esc(topicName(k))}</b> ${RP.lv(L[k].level)} — ${esc(S.setup.name || 'дитина')} ${esc(skillOf(k).strong)}.</li>`).join('')}</ul>`);
+  if (sw.equal) out.push(`<p>${esc(CONFIG.report.evenStart)}</p>`);
   const sf = S.st.safe, lk = sf && sf.locks && sf.locks[1];
-  if (lk && !sf.skipped && sf.end !== 'skipped') { if (lk.hint) out.push('Біля сейфа дитина сама попросила підказку — це цінне вміння звертатися по допомогу.'); else if (sf.end === 'time' || lk.opened) out.push('Біля сейфа дитина працювала до кінця, не здаючись.'); }
-  let u = 0, o = 0, s2 = 0; SKILL_KEYS.forEach(k => { const a = S.self[k], l = L[k].level; if (!a || !l) return; a < l ? u++ : a > l ? o++ : s2++; });
-  if (u > o && u >= s2) out.push('Себе дитина оцінює скромніше, ніж показала гра, — їй важливо чути про свої успіхи.');
-  else if (o > u && o >= s2) out.push('Себе дитина оцінює трохи вище за результати гри — це звичайна для віку впевненість, на яку можна спиратися.');
-  else if (s2) out.push('Себе дитина бачить досить точно.');
-  return out.slice(0, 5).join(' ');
+  if (L.safe.level && lk) { if (lk.hint) out.push('<p>Біля сейфа дитина сама попросила підказку — це цінне вміння звертатися по допомогу.</p>'); else if (sf.end === 'time' || lk.opened) out.push('<p>Біля сейфа дитина працювала до кінця, не здаючись.</p>'); }
+  const fr = S.st.friend;
+  if (L.friend.level && fr && S.setup.group === '910' && fr.q >= 2) out.push('<p>У розмові з однолітком дитина ставила зустрічні питання — так розмова триває, а дружба зав’язується.</p>');
+  return out.join('');
 }
-function rpStyle() {
+function rpStyle(L) {
   const out = [], sf = S.st.safe, lk = sf && sf.locks && sf.locks[1];
-  if (lk && !sf.skipped && sf.end !== 'skipped') {
+  if (L.safe.level && lk) {
     out.push(`<b>Звернення по допомогу.</b> На складнішому замку ${lk.stuckAt !== null ? 'дитина застрягала (3 спроби поспіль без нового зеленого)' : 'дитина не застрягала'}; підказку ${lk.hint ? 'просила' : 'не просила'}.`);
     out.push(`<b>Наполегливість.</b> Спроб на складнішому замку — ${lk.attempts.length}; ${sf.end === 'stopped' ? `зупинилась на ${fmtTime(sf.stoppedAt)}` : sf.end === 'time' ? 'працювала до кінця часу' : 'відкрила замок'}.`);
   }
   const hk = S.st.hike;
-  if (S.setup.group === '910' && hk && hk.plan1 && hk.plan2) out.push(`<b>Зміна плану.</b> У розкладі походу порушень до зливи — ${hk.plan1.v.length}, після — ${hk.plan2.v.length}.`);
-  if (S.setup.group === '78' && hk && hk.route) { const r = ctxOf(S, 'hike').C.routes.find(x => x.id === hk.route); out.push(`<b>Зміна плану.</b> Коли міст виявився зламаним, дитина обрала «${esc(r.name.toLowerCase())}».`); }
-  const corr = SKILL_KEYS.reduce((a, k) => a + ((S.st[k] && S.st[k].corr) || 0), 0);
+  if (L.hike.level && S.setup.group === '910' && hk && hk.plan1 && hk.plan2) out.push(`<b>Зміна плану.</b> У розкладі походу порушень до зливи — ${hk.plan1.v.length}, після — ${hk.plan2.v.length}.`);
+  if (L.hike.level && S.setup.group === '78' && hk && hk.route) { const r = ctxOf(S, 'hike').C.routes.find(x => x.id === hk.route); out.push(`<b>Зміна плану.</b> Коли міст виявився зламаним, дитина обрала «${esc(r.name.toLowerCase())}».`); }
+  const corr = rpAssessed(L).reduce((a, k) => a + ((S.st[k] && S.st[k].corr) || 0), 0);
   out.push(`<b>Самовиправлення.</b> ${corr ? `Дитина змінювала свою відповідь ${corr} ${pl(corr, ['раз', 'рази', 'разів'])}.` : 'Дитина відповідала одразу, без виправлень.'}`);
-  if (S.skips.probes || S.skips.stations) out.push(`<b>Пропуски.</b> Пропущено проб — ${S.skips.probes}, станцій — ${S.skips.stations}.`);
   return out;
 }
 function rpSelf(L) {
   const u = [], o = [], same = [];
-  const rows = CONFIG.skills.map(sk => { const a = S.self[sk.key], l = L[sk.key].level; let rel = '—';
-    if (a && l) { if (a < l) { rel = 'скромніше за результат'; u.push(sk.key); } else if (a > l) { rel = 'вище за результат'; o.push(sk.key); } else { rel = 'точно'; same.push(sk.key); } }
-    return `<tr><td class="nm">${esc(sk.area)}</td><td>${RP.dots(a)}</td><td>${RP.lv(l)}</td><td>${rel}</td></tr>`; }).join('');
+  const rows = rpAssessed(L).map(k => { const a = S.self[k], l = L[k].level; let rel = '—';
+    if (a) { if (a < l) { rel = 'скромніше за результат'; u.push(k); } else if (a > l) { rel = 'вище за результат'; o.push(k); } else { rel = 'точно'; same.push(k); } }
+    return `<tr><td class="nm">${esc(topicName(k))}</td><td>${RP.dots(a)}</td><td>${RP.lv(l)}</td><td>${rel}</td></tr>`; }).join('');
   const parts = []; if (u.length) parts.push(`недооцінює себе: ${RP.list(u.map(RP.name))}`); if (same.length) parts.push(`бачить себе точно: ${RP.list(same.map(RP.name))}`); if (o.length) parts.push(`оцінює себе вище, ніж показала гра: ${RP.list(o.map(RP.name))}`);
-  return `<table><thead><tr><th>Навичка</th><th>Самооцінка</th><th>Результат</th><th>Як бачить себе</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:8px">${parts.length ? 'Дитина ' + parts.join('; ') + '.' : 'Самооцінку не заповнено.'}${u.length ? ' Там, де дитина себе недооцінює, особливо важливо помічати й називати її успіхи.' : ''}</p>`;
+  let tone = ''; if (u.length > o.length && u.length >= same.length) tone = ' Себе дитина оцінює скромніше, ніж показала гра, — їй важливо чути про свої успіхи.'; else if (o.length > u.length && o.length >= same.length) tone = ' Себе дитина оцінює трохи вище за результати гри — це звичайна для віку впевненість, на яку можна спиратися.';
+  return `<table><thead><tr><th>Навичка</th><th>Самооцінка</th><th>Результат</th><th>Як бачить себе</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:8px">${parts.length ? 'Дитина ' + parts.join('; ') + '.' : 'Самооцінку не заповнено.'}${esc(tone)}</p>`;
 }
 function rpRecommend(L) {
   const pk = pickStart(S, L), all = allStrong(L);
-  if (!pk.length && !all) return '<p>Недостатньо даних.</p>';
-  const focus = pk.length ? `<ul>${pk.map(p => `<li><b>${esc(skillOf(p.k).area)}</b> — ${esc(p.why)}.</li>`).join('')}</ul>` : `<p>${esc(fill(CONFIG.report.allStrong, { name: S.setup.name }))}</p>`;
-  // «Що помічати й хвалити вдома» — як і раніше: навички з блоку вище (або дві найслабші, якщо всі «Сильна»)
-  const home = pk.length ? pk.map(p => p.k) : SKILL_KEYS.filter(k => L[k].level).sort((a, z) => (S.self[a] || 4) - (S.self[z] || 4)).slice(0, 2);
-  return `<h3 style="margin-bottom:4px">${esc(CONFIG.report.focusTitle)}</h3>${focus}
-    <h3 style="margin:8px 0 4px">Що помічати й хвалити вдома</h3><ul>${home.map(k => `<li><b>${esc(skillOf(k).area)}:</b> ${esc(skillOf(k).praise)}</li>`).join('')}<li>Хваліть зусилля, спроби й стратегію, а не лише результат.</li></ul>`;
+  if (!pk.length && !all) return '<p>Напрямки роботи визначимо на перших заняттях курсу.</p>';
+  const focus = pk.length ? `<ul>${pk.map(p => `<li><b>${esc(topicName(p.k))}</b> — ${esc(p.why)}.${RP.module(p.k) ? ` <span class="rp-note">(${esc(RP.module(p.k))})</span>` : ''}</li>`).join('')}</ul>` : `<p>${esc(fill(CONFIG.report.allStrong, { name: S.setup.name }))}</p>`;
+  const home = pk.length ? pk.map(p => p.k) : rpAssessed(L).sort((a, z) => (S.self[a] || 4) - (S.self[z] || 4)).slice(0, 2);
+  return `${focus}<h3 style="margin:8px 0 4px">Що помічати й хвалити вдома</h3><ul>${home.map(k => `<li><b>${esc(topicName(k))}:</b> ${esc(skillOf(k).praise)}</li>`).join('')}<li>Хваліть зусилля, спроби й стратегію, а не лише результат.</li></ul>`;
+}
+// «Що ще розвиває курс»: невибрані теми й ті, що не вдалося подивитися сьогодні, — одним рядком, без рівнів
+function rpMore(L) {
+  const keys = CONFIG.core.map(c => c.station).concat(CONFIG.topics.map(t => t.station)).filter(k => SKILL_KEYS.includes(k) && !L[k].level);
+  if (!keys.length) return '';
+  return `<ul class="rp-more">${keys.map(k => { const t = topicOfStation(k) || coreOf(k), mod = RP.module(k);
+    return `<li><b>${esc(t.name)}</b> — ${esc(t.desc)}. ${esc(CONFIG.report.onCourse)}${mod ? ` — ${esc(mod)}` : ''}.</li>`; }).join('')}</ul>`;
 }
 function viewReport() {
-  const L = scoreAll(S), gr = S.setup.group, min = lessonMinutes(S), tk = titleSkill(S, L);
+  const L = scoreAll(S), gr = S.setup.group, min = lessonMinutes(S), tk = titleSkill(S, L), RPT = CONFIG.report;
+  const AS = rpAssessed(L), ch = chosenStations(S), chEv = ch.filter(k => L[k].level), core = CORE_KEYS.filter(k => L[k].level);
   const meta = [['Дитина', esc(`${S.setup.name} ${S.setup.surname}`.trim())], ['Вік', `${S.setup.age} ${pl(S.setup.age, ['рік', 'роки', 'років'])}`], ['Група', CONFIG.groups[gr].label], ['Дата', fmtDate(S.t.lessonStart || S.date)], ['Тривалість', min ? `${min} хв` : '—']];
   if (S.setup.mik.trim()) meta.push(['МІК', esc(S.setup.mik)]);
-  const table = CONFIG.skills.map(sk => { const r = L[sk.key], pn = probeNames(sk.key, gr);
-    return `<tr><td class="nm">${esc(sk.area)}</td><td>${esc(RP.measured(sk))}</td><td>${r.skipped && !r.p1 && !r.p2 ? esc(CONFIG.report.skippedStation) : `${esc(pn[0])}: ${RP.probe(r.p1)}${r.single ? '' : `<br>${esc(pn[1])}: ${RP.probe(r.p2)}`}`}</td><td>${RP.lv(r.level)}</td><td>${RP.dots(S.self[sk.key])}</td></tr>`; }).join('');
-  const skills = CONFIG.skills.map(sk => { const r = L[sk.key], pn = probeNames(sk.key, gr), Tx = r.level ? sk.levels[r.level] : null;
-    const probes = r.p1 || r.p2 ? `<ul>${r.p1 ? `<li>${esc(pn[0])}: ${esc(r.p1.ev)}</li>` : `<li>${esc(pn[0])}: пропущено</li>`}${r.single ? '' : r.p2 ? `<li>${esc(pn[1])}: ${esc(r.p2.ev)}</li>` : `<li>${esc(pn[1])}: ${sk.key === 'safe' ? 'не оцінено' : 'пропущено'}</li>`}</ul>` : esc(S.st[sk.key] && S.st[sk.key].skipped ? CONFIG.report.skippedStation : CONFIG.report.skippedAll);
-    return `<div class="rp-skill" id="sk-${sk.key}"><div class="hd"><h3>${esc(sk.area)}</h3>${RP.lv(r.level)}</div><dl><dt>Навіщо це</dt><dd>${esc(sk.about)}</dd><dt>Що робила дитина</dt><dd>${probes}</dd>
-      ${Tx ? `<dt>Що означає рівень</dt><dd>${esc(Tx.meaning)}</dd><dt>Як це проявляється</dt><dd>${esc(Tx.life)}</dd><dt>Вправи вдома (5–10 хв)</dt><dd><ul>${Tx.home.map(h => `<li>${esc(h)}</li>`).join('')}</ul></dd>` : ''}</dl></div>`; }).join('');
-  const marks = CONFIG.skills.map(sk => `<button class="mark" data-g="goto" data-arg="${sk.key}">${CONFIG.levelColors[L[sk.key].level || 0]} ${esc(sk.area)}</button>`).join('');
+  const table = AS.map(k => { const sk = skillOf(k), r = L[k], pn = probeNames(k, gr);
+    const pr = [r.p1 && r.p1.level && `${esc(pn[0])}: ${esc(r.p1.short)} ${RP.lv(r.p1.level)}`, !r.single && r.p2 && r.p2.level && `${esc(pn[1])}: ${esc(r.p2.short)} ${RP.lv(r.p2.level)}`].filter(Boolean).join('<br>');
+    return `<tr><td class="nm">${esc(topicName(k))}</td><td>${esc(RP.measured(sk))}</td><td>${pr}</td><td>${RP.lv(r.level)}</td><td>${RP.dots(S.self[k])}</td></tr>`; }).join('');
+  const marks = AS.map(k => `<button class="mark" data-g="goto" data-arg="${k}">${CONFIG.levelColors[L[k].level]} ${esc(topicName(k))}</button>`).join('');
+  let n = 0; const sec = (title, body, cls = '') => body ? `<section${cls ? ` class="${cls}"` : ''}><h2>${++n}. ${title}</h2>${body}</section>` : '';
   const html = `<div class="rp-top no-print" data-html2canvas-ignore="true"><span class="nm">${esc(S.setup.name)}</span><span class="ttl">Титул: ${esc(skillOf(tk).title)}</span><div class="marks">${marks}</div></div>
-    <div class="rp" id="report"><div class="rp-brand">${esc(CONFIG.report.brand)}</div><h1>${esc(CONFIG.report.title)}</h1>
+    <div class="rp" id="report"><div class="rp-brand">${esc(RPT.brand)}</div><h1>${esc(RPT.title)}</h1>
     <dl class="rp-meta">${meta.map(([a, z]) => `<div><dt>${a}</dt><dd>${z}</dd></div>`).join('')}</dl>
-    <section><h2>1. Підсумок</h2><p>${rpSummary(L)}</p></section>
-    <section><h2>2. Профіль</h2><div class="rp-profile"><div>${radarSVG(L)}<div class="rp-legend"><span>— результат</span><span>- - самооцінка</span></div>${SKILL_KEYS.some(k => !L[k].level) ? '<div class="rp-note">* не оцінено — пропущено</div>' : ''}</div>
-      <table><thead><tr><th>Навичка</th><th>Що вимірювали</th><th>Результати двох проб</th><th>Рівень</th><th>Самооцінка</th></tr></thead><tbody>${table}</tbody></table></div></section>
-    <section><h2>3. По кожній навичці</h2><div class="rp-skills">${skills}</div></section>
-    <section><h2>4. Стиль роботи</h2><ul>${rpStyle().map(x => `<li>${x}</li>`).join('')}</ul><p class="rp-note">Це спостереження, а не оцінки.</p></section>
-    <section><h2>5. Самооцінка й результат</h2>${rpSelf(L)}</section>
-    <section><h2>6. Рекомендації</h2>${rpRecommend(L)}</section>
+    ${sec(esc(fill(RPT.chosenTitle, { list: chosenNames(S).join(', ') })), chEv.length ? `<div class="rp-skills rp-chosen">${chEv.map(k => rpSkill(k, L[k], true)).join('')}</div>` : `<p>${esc(RPT.chosenNone)}</p>`, 'rp-sec-chosen')}
+    ${sec(esc(RPT.coreTitle), core.length ? `<p class="rp-note">${esc(RPT.coreNote)}</p><div class="rp-skills">${core.map(k => rpSkill(k, L[k], false)).join('')}</div>` : '', 'rp-sec-core')}
+    ${sec('Профіль навичок', AS.length ? `<div class="rp-profile"><div>${AS.length >= 3 ? radarSVG(L, AS) : barsHTML(L, AS)}</div>
+      <table><thead><tr><th>Навичка</th><th>Що вимірювали</th><th>Результати проб</th><th>Рівень</th><th>Самооцінка</th></tr></thead><tbody>${table}</tbody></table></div>` : '')}
+    ${sec(esc(RPT.strongTitle), AS.length ? rpStrong(L) : '')}
+    ${sec(esc(RPT.focusTitle), rpRecommend(L))}
+    ${sec('Самооцінка й результат', AS.length ? rpSelf(L) : '')}
+    ${sec('Стиль роботи', AS.length ? `<ul>${rpStyle(L).map(x => `<li>${x}</li>`).join('')}</ul><p class="rp-note">Це спостереження, а не оцінки.</p>` : '')}
+    ${sec(esc(RPT.moreTitle), rpMore(L), 'rp-sec-more')}
 </div>
     <div class="rp-actions no-print" data-html2canvas-ignore="true">${g('print', 'Зберегти PDF', { cls: 'primary' })}<span id="sheetStatus" class="rp-note">${sheetStatusHTML()}</span><span style="flex:1"></span>${g('back', '← До уроку')}</div>`;
   return T(html);
+
 }
 
 /* ---------- Google Таблиця + PDF (html2pdf.js 0.10.1) ---------- */
@@ -555,7 +648,13 @@ function doUndo() {
 }
 const GA = {
   menu() { ui.menu = !ui.menu; renderHeader(); },
-  reset() { if (!armed('reset')) { renderHeader(); return; } const snd = S.sound; S = freshState(snd); ui.undo = []; ui.menu = false; ui.view = null; commit(); },
+  reset() { if (!armed('reset')) { renderHeader(); return; } const snd = S.sound; S = freshState(snd); applyUrlTopics(); ui.undo = []; ui.menu = false; ui.view = null; commit(); },
+  topic(k) {
+    if (S.phase !== 'setup') return;
+    const r = toggleTopic(S.setup, k); clearTimeout(ui.twT);
+    ui.topicWarn = r === 'max'; if (ui.topicWarn) ui.twT = setTimeout(() => { ui.topicWarn = false; render(); }, 3500);
+    commit();
+  },
   openGame() { openGame(); },
   sound() { S.sound = !S.sound; commit(); },
   start() { if (!connected() || !setupOk()) return; A.start(S); ui.undo = []; commit(); },
@@ -599,7 +698,7 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (S.phase !== 'lesson') return;
-  if (e.key === ' ') { const s = S.st[S.cur]; e.preventDefault(); if (S.cur === 'emotions' && s && s.step === 'calm') doAct('plus'); }
+  if (e.key === ' ') { const s = S.st[S.cur]; e.preventDefault(); if (S.cur === 'emotions' && s && s.step === 'calm') doAct('plus'); if (S.cur === 'friend' && s && s.step === 'ping') doAct('ask'); }
   if (e.key === 'Enter') { e.preventDefault(); const nb = document.querySelector('[data-g="next"]'); if (nb && !nb.disabled) { const now = Date.now(); if (now - ui.lastT >= 450) { ui.lastT = now; GA.next(); } } }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'я')) { e.preventDefault(); doUndo(); }
 });
@@ -608,14 +707,34 @@ document.addEventListener('keydown', e => {
 setInterval(() => {
   if (A.tick(S)) { ui.undo = []; commit(); }
   document.querySelectorAll('.timer[data-ends]').forEach(el => { el.textContent = fmtTime(Math.ceil(Math.max(0, (+el.dataset.ends - Date.now()) / 1000))); });
-  const t = $('#total'); if (t && S.t.lessonStart) t.textContent = `${Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000)} хв з ${CONFIG.planMinutes}`;
+  const t = $('#total'); if (t && S.t.lessonStart) t.textContent = `${Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000)} хв з ≈${planOf(routeOfS(S))}`;
   const c = $('#conn'); if (c && c.classList.contains('on') !== connected()) { renderHeader(); if (S.phase === 'setup') render(); }
 }, 250);
 
 render();
 SYNC.publish(S);
 if (CONFIG.sheets.endpoint && sheetQueue().length) sheetFlush();
-if (new URLSearchParams(location.search).get('test') === '1') selfTest();
+// тести звіту: обрані теми першими, невибрані — «Цю навичку ми розглянемо на курсі», ніде немає «не оцінено»
+function reportFor(st) { const keep = S; S = st; try { return viewReport(); } finally { S = keep; } }
+function reportTests(eq, mk, D) {
+  const text = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const X = mk('78', 'final', 'f', ['druzhba', 'vpevnenist']); X.st.emotions = D.e1.S.st.emotions; X.st.friend = D.f8.s; X.st.radio = { done: true, skipped: true, step: 'done' }; X.self.friend = 2; X.phase = 'report';
+  const h = reportFor(X), t = text(h), at = s => t.indexOf(s);
+  eq('Звіт: перший розділ — «Ви обрали: Впевненість, Дружба», далі «Базові навички», «Що ще розвиває курс»', [/<section[^>]*><h2>1\. Ви обрали: Впевненість, Дружба<\/h2>/.test(h), at('Ви обрали') < at('Базові навички'), at('Базові навички') < at('Що ще розвиває курс')], [true, true, true]);
+  eq('Звіт: обрана Дружба — докладно, з модулем курсу', [/id="sk-friend"/.test(h.split('rp-sec-core')[0]), t.includes('Дружба → модуль «Майстер дружби»'), t.includes('Як це проявляється вдома й у школі')], [true, true, true]);
+  const more = t.slice(at('Що ще розвиває курс'));
+  eq('Звіт: невибрані й пропущена обрана (Впевненість) — «Цю навичку ми розглянемо на курсі»', [(more.match(/Цю навичку ми розглянемо на курсі/g) || []).length, more.includes('Впевненість —'), more.includes('Гроші —'), more.includes('модуль «Скарбничка»')], [6, true, true, true]);
+  eq('Звіт: ніде немає «не оцінено» чи «пропущено» і кодів відповідей', [/не оцінено|пропущено/i.test(t), /код \d|F1|F2/.test(t)], [false, false]);
+  eq('Звіт: оцінено 2 навички — шкали замість радару', [h.includes('class="radar"'), h.includes('class="bars"')], [false, true]);
+  eq('Звіт: панель угорі — лише оцінені, обрані першими', [...h.split('rp-top')[1].split('id="report"')[0].matchAll(/data-arg="(\w+)"/g)].map(m => m[1]), ['friend', 'emotions']);
+  const Y = mk('910', 'final', 'm', ['druzhba', 'groshi', 'napoleglyvist']); Y.st.emotions = D.e1.S.st.emotions; Y.st.friend = D.f9.s; Y.st.safe = D.sf; Y.st.money = D.m8; Y.phase = 'report';
+  Y.setup.group = '78'; const h2 = reportFor(Y), t2 = text(h2);
+  eq('Звіт: 4 оцінені навички — радар; невибрані — лише в «Що ще розвиває курс»', [h2.includes('class="radar"'), (t2.slice(t2.indexOf('Що ще розвиває курс')).match(/Цю навичку ми розглянемо на курсі/g) || []).length, /Впевненість|Вміння домовлятися/.test(t2.slice(0, t2.indexOf('Що ще розвиває курс')))], [true, 4, false]);
+  { const Z = mk('78', 'final', 'f', ['napoleglyvist']); Z.st.safe = JSON.parse(JSON.stringify(D.sf)); Z.st.safe.locks[1].stuckAt = null; Z.st.safe.locks[1].hint = null; Z.phase = 'report';
+    const tz = text(reportFor(Z)); eq('Звіт: Сейф без «застрягла» — про допомогу без «не оцінено»', [/не оцінено|пропущено/i.test(tz), tz.includes(CONFIG.report.safeNoStuck)], [false, true]); }
+  eq('Звіт: «На що звернемо увагу» — пріоритет обраним темам', pickStart(Y, scoreAll(Y)).every(p => chosenStations(Y).includes(p.k)) || pickStart(Y, scoreAll(Y)).length === 0, true);
+}
+if (new URLSearchParams(location.search).get('test') === '1') selfTest(reportTests);
 </script>
 </body>
 </html>

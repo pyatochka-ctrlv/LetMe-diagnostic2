@@ -46,11 +46,58 @@ function fmtDate(d) { return new Date(d).toLocaleDateString('uk-UA', { day: '2-d
 function skillOf(k) { return CONFIG.skills.find(s => s.key === k); }
 function probeNames(k, g) { const p = skillOf(k).probes; return Array.isArray(p) ? p : p[g]; }
 
+/* ---------------- теми діагностики й маршрут уроку ---------------- */
+const TOPIC_KEYS = CONFIG.topics.map(t => t.key);
+const CORE_KEYS = CONFIG.core.map(c => c.station);
+function topicByKey(k) { return CONFIG.topics.find(t => t.key === k) || null; }
+function topicOfStation(st) { return CONFIG.topics.find(t => t.station === st) || null; }
+function coreOf(st) { return CONFIG.core.find(c => c.station === st) || null; }
+// назва навички для батьків: тема («Впевненість») або базова навичка («Емоції»)
+function topicName(st) { const t = topicOfStation(st) || coreOf(st); return t ? t.name : skillOf(st).area; }
+function topicModule(st) { const t = topicOfStation(st) || coreOf(st); return t && t.module ? t.module : ''; }
+// валідні ключі без повторів, у порядку таблиці тем, не більше max
+function normTopics(list) {
+  const want = new Set((list || []).map(x => String(x).trim().toLowerCase()).filter(Boolean));
+  return TOPIC_KEYS.filter(k => want.has(k)).slice(0, CONFIG.topicPick.max);
+}
+// ?topics=druzhba,vpevnenist → ['vpevnenist', 'druzhba']; немає параметра → null
+function parseTopicsParam(search) {
+  let v = null; try { v = new URLSearchParams(search || '').get('topics'); } catch (e) { }
+  return v === null ? null : normTopics(v.split(/[,;\s]+/));
+}
+// клік по картці теми: 'on' | 'off' | 'max' (четверта тема — не додаємо)
+function toggleTopic(setup, key) {
+  if (!TOPIC_KEYS.includes(key)) return false;
+  const cur = normTopics(setup.topics);
+  if (cur.includes(key)) { setup.topics = cur.filter(k => k !== key); return 'off'; }
+  if (cur.length >= CONFIG.topicPick.max) { setup.topics = cur; return 'max'; }
+  setup.topics = normTopics(cur.concat([key])); return 'on';
+}
+function topicsOk(setup) { const n = normTopics(setup.topics).length; return n >= CONFIG.topicPick.min && n <= CONFIG.topicPick.max; }
+// Прибуття → ядро[0] → обрані теми в порядку таблиці (last: true — останніми) → решта ядра → Фінал
+function routeOf(topics) {
+  const set = normTopics(topics), chosen = CONFIG.topics.filter(t => set.includes(t.key));
+  const mid = chosen.filter(t => !t.last).concat(chosen.filter(t => t.last)).map(t => t.station);
+  return ['hero', CORE_KEYS[0], ...mid, ...CORE_KEYS.slice(1), 'final'];
+}
+// маршрут поточного уроку; для старих збережених станів без тем — усі станції
+function routeOfS(S) { return S && S.route ? S.route : routeOf(S && S.setup && Array.isArray(S.setup.topics) && S.setup.topics.length ? S.setup.topics : TOPIC_KEYS); }
+function planOf(route) { return route.reduce((a, k) => a + (CONFIG.locations[k] ? CONFIG.locations[k].minutes : 0), 0); }
+function inRoute(S, k) { return routeOfS(S).includes(k); }
+// станції обраних тем (у порядку маршруту) і назви обраних тем (у порядку таблиці)
+function chosenStations(S) { const set = new Set(normTopics(S.setup.topics).map(k => topicByKey(k).station)); return routeOfS(S).filter(k => set.has(k)); }
+function chosenNames(S) { return normTopics(S.setup.topics).map(k => topicByKey(k).name); }
+function locWords(n) { return CONFIG.locWords[n] || `${n} ${pl(n, ['локація', 'локації', 'локацій'])}`; }
+function routeLocs(S) { return locWords(routeOfS(S).filter(k => k !== 'hero' && k !== 'final').length); }
+// предмети костюма — за порядком проходження; корона — у фіналі
+function nextItem(S) { return CONFIG.costume.order[S.items.filter(i => i !== CONFIG.costume.final).length]; }
+function giftAcc(S) { const it = nextItem(S); return it === undefined ? '' : CONFIG.costume.acc[it]; }
+
 /* ---------------- стан ---------------- */
 function freshState(sound = true) {
   return { v: 5, id: uuid(), rev: 0, phase: 'setup',
-    setup: { name: '', surname: '', mik: '', group: null, age: null, gender: null },
-    hero: { head: null, cape: null }, cur: 'hero', st: {}, items: [], self: {}, sound,
+    setup: { name: '', surname: '', mik: '', group: null, age: null, gender: null, topics: [] },
+    hero: { head: null, cape: null }, cur: 'hero', route: null, st: {}, items: [], self: {}, sound,
     t: { lessonStart: null, lessonEnd: null }, skips: { probes: 0, stations: 0 }, fx: { n: 0, kind: '', data: null }, sheet: null, date: new Date().toISOString() };
 }
 function ctxOf(S, key) {
@@ -159,8 +206,9 @@ function radioAvg(answers, ask, g, T) {
 const ST = {};
 function stationDone(S, key, s) {
   s.step = 'done'; s.done = true; s.t1 = Date.now(); closeProbe(s);
-  const it = CONFIG.costume[key];
-  if (it !== undefined && !S.items.includes(it)) { S.items.push(it); fx(S, 'item', { item: it, key }); }
+  if (s.item !== undefined) return;
+  const it = nextItem(S);   // наступний предмет зі списку — за порядком проходження, а не за станцією
+  if (it !== undefined && !S.items.includes(it)) { S.items.push(it); s.item = it; fx(S, 'item', { item: it, key }); }
 }
 function closeProbe(s) { const p = s.curP; if (p && s.pt && s.pt[p] && !s.pt[p].end) s.pt[p].end = Date.now(); }
 
@@ -609,6 +657,60 @@ ST.radio = {
 };
 function guestName(s) { return s && s.guestMode === 'named' && s.guest ? s.guest : CONFIG.content.radio.hostIskra; }
 
+/* ---------- 8. Перший крок — Дружба ----------
+   7–8: «Як приєднатися» (один код) → «Якщо сказали “ні”» (кілька кодів, рівень — максимум).
+   9–10: «Увійти в розмову» (один код) → «Розмова-пінг-понг» 60 с (лічильник зустрічних питань + «ділиться своїм»). */
+function friendCode(set, id) { return CONFIG.codes[set].items.find(i => i.id === id) || null; }
+function friendNoLevel(marks) { const v = marks.map(id => (friendCode('friendNo', id) || { v: 0 }).v); return v.length ? Math.max(...v) : null; }
+function friendPingLevel(q, share, T) { return q >= T.ping.l3 ? 3 : (q >= T.ping.l2 || share) ? 2 : 1; }
+ST.friend = {
+  init: () => ({ step: 'intro', p1: null, marks: [], q: 0, share: false, endsAt: null, running: false, ended: false, skip: {} }),
+  probeOf: s => (['intro', 'join', 'enter'].includes(s.step) ? 1 : ['no', 'pingReady', 'ping'].includes(s.step) ? 2 : null),
+  canNext: s => (s.step === 'join' || s.step === 'enter' ? !!s.p1 : s.step === 'no' ? s.marks.length > 0 : true),
+  nextLabel: s => (s.step === 'pingReady' ? 'Старт 60 с' : s.step === 'ping' ? 'Завершити розмову' : 'Далі'),
+  next(S, s, ctx) {
+    if (s.step === 'intro') s.step = ctx.g === '78' ? 'join' : 'enter';
+    else if (s.step === 'join') s.step = 'no';
+    else if (s.step === 'enter') s.step = 'pingReady';
+    else if (s.step === 'pingReady') { s.step = 'ping'; s.running = true; s.endsAt = Date.now() + ctx.T.pingSec * 1000; }
+    else if (s.step === 'no' || s.step === 'ping') { s.running = false; stationDone(S, 'friend', s); }
+  },
+  act: {
+    code(S, s, id) { if ((s.step !== 'join' && s.step !== 'enter') || !friendCode(s.step === 'join' ? 'friendJoin' : 'friendEnter', id)) return false; s.p1 = s.p1 === id ? null : id; },
+    mark(S, s, id) { if (s.step !== 'no' || !friendCode('friendNo', id)) return false; const k = s.marks.indexOf(id); if (k >= 0) s.marks.splice(k, 1); else s.marks.push(id); },
+    ask(S, s) { if (s.step !== 'ping') return false; s.q++; fx(S, 'sparkle'); },
+    share(S, s) { if (s.step !== 'ping' && s.step !== 'pingReady') return false; s.share = !s.share; }
+  },
+  skipProbe(S, s, ctx) {
+    if (['intro', 'join', 'enter'].includes(s.step)) { s.skip.p1 = true; s.step = ctx.g === '78' ? 'no' : 'pingReady'; }
+    else { s.skip.p2 = true; s.running = false; stationDone(S, 'friend', s); }
+  },
+  tick(S, s) { if (s.step === 'ping' && s.running && Date.now() >= s.endsAt) { s.running = false; s.ended = true; fx(S, 'timer'); return true; } },
+  score(s, ctx) {
+    const set1 = ctx.g === '78' ? 'friendJoin' : 'friendEnter', c1 = s.p1 && friendCode(set1, s.p1);
+    const p1 = s.skip.p1 || !c1 ? null : { level: c1.v, short: c1.short, ev: `${ctx.g === '78' ? 'Щоб пограти з дітьми, герой' : 'Щоб приєднатися до розмови, герой'} ${c1.label.charAt(0).toLowerCase() + c1.label.slice(1)}`, raw: { code: s.p1 } };
+    let p2 = null;
+    if (!s.skip.p2 && ctx.g === '78' && s.marks.length) {
+      const it = s.marks.map(id => friendCode('friendNo', id)), lv = friendNoLevel(s.marks);
+      p2 = { level: lv, short: it.map(x => x.short).join(', '), ev: `Після відмови «${ctx.C.no}» герой: ${it.map(x => x.short).join('; ')}`, raw: { marks: s.marks } };
+    }
+    if (!s.skip.p2 && ctx.g === '910' && (s.running || s.ended || s.done) && s.endsAt) {
+      const n = `${s.q} ${pl(s.q, ['зустрічне питання', 'зустрічні питання', 'зустрічних питань'])}`;
+      p2 = { level: friendPingLevel(s.q, s.share, ctx.T), short: `питань: ${s.q}${s.share ? ', ділиться своїм' : ''}`, ev: `Розмова за ${ctx.T.pingSec} с: ${n}${s.share ? '; ділиться своїм досвідом у тему' : ''}`, raw: { q: s.q, share: s.share } };
+    }
+    return { p1, p2 };
+  },
+  // «Усі відповіді»: F1 код 3 | F2 коди: 1 засмутиться, 2 інший варіант (7–8) / F2 питань: 2, ділиться своїм (9–10)
+  codes(s, ctx) {
+    const c1 = s.p1 && friendCode(ctx.g === '78' ? 'friendJoin' : 'friendEnter', s.p1), out = [];
+    out.push(s.skip.p1 ? 'F1 пропущено' : `F1 код ${c1 ? c1.v : '—'}${c1 ? ` (${c1.short})` : ''}`);
+    if (s.skip.p2) out.push('F2 пропущено');
+    else if (ctx.g === '78') out.push(`F2 коди: ${s.marks.map(id => { const c = friendCode('friendNo', id); return `${c.v} ${c.short}`; }).join(', ') || '—'}`);
+    else out.push(`F2 питань: ${s.q}${s.share ? ', ділиться своїм' : ''}`);
+    return out;
+  }
+};
+
 /* ---------- Фінал: батарейки за навичками (лише оцінені, по черзі) ---------- */
 ST.final = {
   init: (ctx, S) => ({ step: 'batteries', bi: 0, list: selfList(S) }),
@@ -618,14 +720,14 @@ ST.final = {
     if (s.step !== 'batteries') return;
     if (s.bi < s.list.length - 1) { s.bi++; return; }
     s.step = 'crown'; s.done = true; s.t1 = Date.now();
-    if (!S.items.includes(CONFIG.costume.final)) S.items.push(CONFIG.costume.final);
+    if (!S.items.includes(CONFIG.costume.final)) S.items.push(CONFIG.costume.final);   // корона — завжди у фіналі
     fx(S, 'crown'); S.t.lessonEnd = S.t.lessonEnd || Date.now(); S.phase = 'report';
   },
   act: { self(S, s, n) { const k = s.list[s.bi]; if (!k) return false; const v = +n; S.self[k] = S.self[k] === v ? null : v; if (!S.self[k]) delete S.self[k]; } },
   score: () => null
 };
-// навички для самооцінки: станція пройдена й не пропущена, у порядку станцій
-function selfList(S) { return SKILL_KEYS.filter(k => S.st[k] && S.st[k].done && !S.st[k].skipped); }
+// навички для самооцінки: лише ті, які сьогодні оцінено (є рівень), у порядку маршруту
+function selfList(S) { const L = scoreAll(S); return routeOfS(S).filter(k => SKILL_KEYS.includes(k) && L[k].level); }
 
 /* ---------- коди «Усіх відповідей» для Походу й Боба ---------- */
 ST.hike.codes = (s, ctx) => {
@@ -651,11 +753,11 @@ function trackProbe(S) {
   if (p !== s.curP) { closeProbe(s); s.curP = p; if (p && !s.pt[p]) s.pt[p] = { start: Date.now() }; }
 }
 function advanceStation(S) {
-  const i = ORDER.indexOf(S.cur);
-  if (i < ORDER.length - 1) { S.cur = ORDER[i + 1]; curStation(S); fx(S, 'walk', { to: S.cur }); }
+  const R = routeOfS(S), i = R.indexOf(S.cur);
+  if (i >= 0 && i < R.length - 1) { S.cur = R[i + 1]; curStation(S); fx(S, 'walk', { to: S.cur }); }
 }
 const A = {
-  start(S) { if (S.phase !== 'setup') return false; S.phase = 'lesson'; S.cur = 'hero'; S.t.lessonStart = Date.now(); S.date = new Date().toISOString(); curStation(S); },
+  start(S) { if (S.phase !== 'setup' || !topicsOk(S.setup)) return false; S.setup.topics = normTopics(S.setup.topics); S.route = routeOf(S.setup.topics); S.phase = 'lesson'; S.cur = 'hero'; S.t.lessonStart = Date.now(); S.date = new Date().toISOString(); curStation(S); },
   next(S) {
     if (S.phase !== 'lesson' && !(S.phase === 'report' && S.cur === 'final' && S.st.final && S.st.final.step === 'batteries')) return false;
     const key = S.cur, s = curStation(S), ctx = ctxOf(S, key), M = ST[key];
@@ -700,6 +802,7 @@ function scoreAll(S) {
   const out = {};
   SKILL_KEYS.forEach(k => {
     const s = S.st[k];
+    if (!inRoute(S, k)) { out[k] = { level: null, p1: null, p2: null, notChosen: true }; return; }   // тему не обрано — «на курсі»
     if (!s || !s.done) { out[k] = { level: null, p1: null, p2: null, missing: true }; return; }
     if (s.skipped) { out[k] = { level: null, p1: null, p2: null, skipped: true }; return; }
     const r = ST[k].score(s, ctxOf(S, k));
@@ -708,9 +811,12 @@ function scoreAll(S) {
   });
   return out;
 }
+// титул — лише серед оцінених навичок
 function titleSkill(S, L) {
   let best = null;
-  SKILL_KEYS.forEach(k => {
+  const ev = SKILL_KEYS.filter(k => L[k].level);
+  if (!ev.length) return routeOfS(S).find(k => SKILL_KEYS.includes(k)) || SKILL_KEYS[0];
+  ev.forEach(k => {
     const lv = L[k].level || 0, self = S.self[k] || 9;
     if (!best || lv > best.lv || (lv === best.lv && self < best.self)) best = { k, lv, self };
   });
@@ -721,11 +827,11 @@ function lessonMinutes(S) { const m = lessonMinutesExact(S); return m === null ?
 function stationMinutes(S, k) { const s = S.st[k]; return s && s.t0 && s.t1 ? Math.round((s.t1 - s.t0) / 6000) / 10 : null; }
 // з яких 2 навичок почати на курсі і чому (спільне для звіту й таблиці)
 // «На що ми звернемо особливу увагу на курсі»: лише «Прокидається» і «Росте» (ніколи «Сильна»).
-// Спершу 1, потім 2; при рівності — де самооцінка вища за результат; далі за порядком станцій. Максимум 2.
+// Пріоритет — обраним темам; далі спершу 1, потім 2; при рівності — де самооцінка вища за результат; далі за порядком маршруту. Максимум 2.
 function pickStart(S, L) {
-  const ev = SKILL_KEYS.filter(k => L[k].level && L[k].level < 3);
-  const over = k => (S.self[k] || 0) - L[k].level;
-  return ev.sort((a, z) => L[a].level - L[z].level || over(z) - over(a) || SKILL_KEYS.indexOf(a) - SKILL_KEYS.indexOf(z)).slice(0, 2)
+  const ev = SKILL_KEYS.filter(k => L[k].level && L[k].level < 3), ch = chosenStations(S), R = routeOfS(S);
+  const over = k => (S.self[k] || 0) - L[k].level, pri = k => (ch.includes(k) ? 0 : 1);
+  return ev.sort((a, z) => pri(a) - pri(z) || L[a].level - L[z].level || over(z) - over(a) || R.indexOf(a) - R.indexOf(z)).slice(0, 2)
     .map(k => ({ k, level: L[k].level, why: fill(skillOf(k).focus[L[k].level], { name: S.setup.name || 'Дитина' }) }));
 }
 // усі оцінені навички — «Сильна»
@@ -737,17 +843,18 @@ function strongWeak(L) {
 }
 
 /* ---------------- рядок для Google Таблиці (формат як у НМТ) ---------------- */
-const CODE_PREFIX = { emotions: 'K', safe: 'S', money: 'C', hike: 'P', bob: 'B', playground: 'M', radio: 'R' };
+const CODE_PREFIX = { emotions: 'K', safe: 'S', money: 'C', hike: 'P', bob: 'B', playground: 'M', radio: 'R', friend: 'F' };
 function fmtDateTime(t) { const d = new Date(t), p = n => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
 function lc(l) { return CONFIG.levelColors[l || 0]; }
 function resultCell(S, k, r) {
+  if (r.notChosen) return CONFIG.report.sheetOnCourse;
   if (!r.level && (r.skipped || r.missing) && !r.p1 && !r.p2) return `${lc(0)} ${CONFIG.report.skippedStation}`;
   const pn = probeNames(k, S.setup.group), parts = [];
   [r.p1, r.single ? undefined : r.p2].forEach((p, i) => { if (p === undefined) return; parts.push(p ? `${lc(p.level)} ${pn[i]}: ${p.short}` : `${lc(0)} ${pn[i]}: ${k === 'safe' && i === 1 ? 'не оцінено' : 'пропущено'}`); });
   return `${lc(r.level)} ${r.level ? CONFIG.levelNames[r.level] : 'Не оцінено'} · ${parts.join('; ')}`;
 }
 function answersCell(S) {
-  return SKILL_KEYS.flatMap(k => { const s = S.st[k];
+  return routeOfS(S).filter(k => SKILL_KEYS.includes(k)).flatMap(k => { const s = S.st[k];   // невибрані теми — не пишемо
     if (!s || !s.done || s.skipped) return [`${CODE_PREFIX[k]} пропущено`];
     return ST[k].codes(s, ctxOf(S, k)); }).map(x => tplG(x, S.setup.gender)).join(' | ');
 }
@@ -762,13 +869,13 @@ function routeCell(S, L) {
 }
 function sheetRecord(S) {
   const L = scoreAll(S), sk = CONFIG.skills, g = S.setup.group, gen = S.setup.gender;
-  const headers = ['Дата й час', 'Ім’я', 'Прізвище', 'Вік', 'Вікова група', 'Стать', 'МІК', 'Тривалість, хв',
+  const headers = ['Дата й час', 'Ім’я', 'Прізвище', 'Вік', 'Вікова група', 'Стать', 'МІК', 'Обрані теми', 'Тривалість, хв',
     ...sk.flatMap(x => [`${x.area} — результат`, `${x.area} — що робити`]),
     'Самооцінка', 'Кількість 🟢', 'Кількість 🟡', 'Кількість 🔴', 'Усі відповіді', 'Загальний висновок / маршрут', 'PDF результату', 'id'];
   const probeLv = SKILL_KEYS.flatMap(k => [L[k].p1 && L[k].p1.level, L[k].p2 && L[k].p2.level]).filter(x => typeof x === 'number');
   const cnt = l => probeLv.filter(x => x === l).length, min = lessonMinutesExact(S);
   const row = [fmtDateTime(S.t.lessonStart || S.date), (S.setup.name || '').trim(), (S.setup.surname || '').trim(), S.setup.age || '',
-    g ? CONFIG.groups[g].short : '', gen === 'f' ? 'дівчинка' : gen === 'm' ? 'хлопчик' : '', (S.setup.mik || '').trim(),
+    g ? CONFIG.groups[g].short : '', gen === 'f' ? 'дівчинка' : gen === 'm' ? 'хлопчик' : '', (S.setup.mik || '').trim(), chosenNames(S).join(', '),
     min === null ? '' : Math.round(min * 10) / 10,
     ...sk.flatMap(x => { const r = L[x.key]; return [resultCell(S, x.key, r), r.level ? x.levels[r.level].home.slice(0, 2).map(h => tplG(h, gen)).join(' | ') : '']; }),
     sk.map(x => `${x.area} ${S.self[x.key] ? S.self[x.key] + '/3' : '—'}`).join(' | '),
@@ -800,10 +907,11 @@ const SYNC = {
 /* =====================================================================
    САМОТЕСТИ (pult.html?test=1)
    ===================================================================== */
-function selfTest() {
+function selfTest(extra) {   // extra(eq, mk, дані) — додаткові тести сторінки (звіт — у pult.html)
   const R = [], eq = (name, got, exp) => R.push({ name, ok: JSON.stringify(got) === JSON.stringify(exp), got: JSON.stringify(got), exp: JSON.stringify(exp) });
   const G = 'green', Y = 'yellow', X = 'grey';
-  const mk = (g, cur, gender = 'f') => { const S = freshState(false); Object.assign(S.setup, { name: 'Олеся', surname: 'Іваненко', mik: 'Марія', group: g, age: g === '78' ? 8 : 10, gender }); S.phase = 'lesson'; S.cur = cur; S.t.lessonStart = Date.now() - 27.44 * 60000; curStation(S); return S; };
+  // topics — обрані теми; без них маршрут — усі станції (щоб тестувати будь-яку станцію)
+  const mk = (g, cur, gender = 'f', topics) => { const S = freshState(false); Object.assign(S.setup, { name: 'Олеся', surname: 'Іваненко', mik: 'Марія', group: g, age: g === '78' ? 8 : 10, gender, topics: topics || [] }); S.route = topics ? routeOf(topics) : CONFIG.order.slice(); S.phase = 'lesson'; S.cur = cur; S.t.lessonStart = Date.now() - 27.44 * 60000; curStation(S); return S; };
   // Wordle
   eq('Wordle: усе на місці', wordle(['🍎', '🍌', '🍇'], ['🍎', '🍌', '🍇']), [G, G, G]);
   eq('Wordle: фрукт у середині', wordle(['🍓', '🍌', '🍒'], ['🍎', '🍌', '🍇']), [X, G, X]);
@@ -880,35 +988,77 @@ function selfTest() {
   eq('Радіо: «Без імені» — ведуча Іскра', [ST.radio.canNext(rd2), guestName(rd2)], [true, 'Іскра']);
   const RT = CONFIG.thresholds.radio;
   eq('Радіо: середнє 9–10 з бонусом', [radioAvg([2, 2], 'yes', '910', RT), radioAvg([2, 2], 'yes', '78', RT)], [2.5, 2]);
-  // Самооцінка лише для пройдених навичок
-  const SS = mk('78', 'emotions'); A.skipStation(SS); A.next(SS); A.next(SS); A.next(SS);
-  ['money', 'hike', 'bob', 'playground', 'radio'].forEach(() => { A.skipStation(SS); A.next(SS); });
-  SS.st.safe.done = true; SS.st.safe.skipped = false;   // імітуємо пройдений сейф
-  delete SS.st.final; SS.cur = 'final'; curStation(SS);
-  eq('Самооцінка: лише пройдені навички (без пропущених станцій)', SS.st.final.list, ['safe']);
+  // Теми діагностики: мінімум 1, максимум 3, параметр ?topics=
+  const TS = { topics: [] };
+  eq('Теми: 0 обраних — «Почати» неактивна', topicsOk(TS), false);
+  eq('Теми: додати три, четверта — «max» і не додається', [toggleTopic(TS, 'druzhba'), toggleTopic(TS, 'groshi'), toggleTopic(TS, 'vpevnenist'), toggleTopic(TS, 'napoleglyvist'), TS.topics], ['on', 'on', 'on', 'max', ['vpevnenist', 'druzhba', 'groshi']]);
+  eq('Теми: повторний клік знімає; 1–3 — можна починати', [toggleTopic(TS, 'groshi'), TS.topics.length, topicsOk(TS), toggleTopic(TS, 'nema-takoi')], ['off', 2, true, false]);
+  eq('Теми: ?topics=druzhba,vpevnenist → у порядку таблиці', parseTopicsParam('?topics=druzhba,vpevnenist'), ['vpevnenist', 'druzhba']);
+  eq('Теми: ?topics= — невідомі ключі й повтори відкидаються, максимум 3', [parseTopicsParam('?topics=DRUZHBA,xxx,druzhba,groshi'), parseTopicsParam('?topics=groshi,druzhba,superechky,vpevnenist').length, parseTopicsParam('?test=1')], [['druzhba', 'groshi'], 3, null]);
+  // Маршрут уроку: ядро + обрані теми в порядку таблиці, Радіо — останнім перед Походом
+  eq('Маршрут: Дружба + Впевненість', routeOf(['druzhba', 'vpevnenist']), ['hero', 'emotions', 'friend', 'radio', 'hike', 'final']);
+  eq('Маршрут: Дружба + Гроші + Наполегливість', routeOf(['groshi', 'napoleglyvist', 'druzhba']), ['hero', 'emotions', 'friend', 'safe', 'money', 'hike', 'final']);
+  eq('Маршрут: Впевненість + Домовленості + Суперечки — Радіо останнім', routeOf(['vpevnenist', 'superechky', 'domovlenosti']), ['hero', 'emotions', 'bob', 'playground', 'radio', 'hike', 'final']);
+  eq('Маршрут: лише Впевненість', routeOf(['vpevnenist']), ['hero', 'emotions', 'radio', 'hike', 'final']);
+  eq('Таймінг: ядро 11 хв, кожна тема +4, з трьома темами ≤ 25', [planOf(routeOf([])), planOf(routeOf(['groshi'])), Math.max(...[['groshi', 'napoleglyvist', 'druzhba'], ['vpevnenist', 'superechky', 'domovlenosti'], ['vpevnenist', 'druzhba', 'groshi']].map(t => planOf(routeOf(t)))) <= CONFIG.planMinutes], [11, 15, true]);
+  { const SA = freshState(false); Object.assign(SA.setup, { name: 'Оля', surname: 'К', group: '78', age: 8, gender: 'f' });
+    eq('Старт без тем неможливий; зі темою — маршрут фіксується', [A.start(SA), (SA.setup.topics = ['druzhba'], A.start(SA), SA.route)], [false, ['hero', 'emotions', 'friend', 'hike', 'final']]); }
+  // Самооцінка лише для оцінених навичок
+  const SS = mk('78', 'emotions', 'f', ['napoleglyvist']); A.skipStation(SS); A.next(SS);
+  eq('Маршрут: після Кіностудії — Сейф', SS.cur, 'safe');
+  SS.st.safe = sf; A.next(SS); A.skipStation(SS); A.next(SS);
+  eq('Самооцінка: лише оцінені навички (без пропущених і невибраних)', [SS.cur, SS.st.final.list], ['final', ['safe']]);
   A.act(SS, 'self', 2); A.next(SS);
   eq('Самооцінка: одна навичка → одразу корона', [SS.self.safe, SS.st.final.step, SS.phase], [2, 'crown', 'report']);
+  eq('Титул: лише серед оцінених навичок', titleSkill(SS, scoreAll(SS)), 'safe');
   // ceilAvg і костюм
   eq('ceilAvg з пропущеними пробами', [ceilAvgN(3, null), ceilAvgN(2, 3), ceilAvgN(null, null)], [3, 3, null]);
-  const SI = mk('78', 'emotions'); A.skipStation(SI); A.next(SI); A.skipStation(SI); A.next(SI); A.skipStation(SI);
-  eq('Костюм: пропущені станції однаково дають Маску, Щит, Пояс', SI.items, [0, 3, 1]);
+  const walk = topics => { const W = mk('78', 'emotions', 'f', topics); while (W.cur !== 'final') { A.skipStation(W); A.next(W); } A.next(W); return W; };
+  const O = CONFIG.costume.order, W1 = walk(['druzhba', 'vpevnenist']), W2 = walk(['groshi', 'napoleglyvist', 'druzhba']);
+  eq('Костюм: предмети за порядком проходження (2 теми)', [W1.items, W1.st.emotions.item, W1.st.friend.item, W1.st.radio.item, W1.st.hike.item], [O.slice(0, 4).concat([CONFIG.costume.final]), O[0], O[1], O[2], O[3]]);
+  eq('Костюм: інший маршрут — той самий порядок предметів, корона у фіналі', [W2.items.slice(0, 5), W2.st.friend.item, W2.st.money.item], [O.slice(0, 5), O[1], O[3]]);
+  const WF = mk('78', 'emotions', 'f', ['vpevnenist']); A.skipStation(WF); A.next(WF); A.skipStation(WF); A.next(WF); A.skipStation(WF); A.next(WF); A.next(WF);
+  eq('Костюм: корона — завжди у фіналі', [WF.items.includes(CONFIG.costume.final), WF.items[WF.items.length - 1]], [true, CONFIG.costume.final]);
+  eq('Костюм: «Браслет дружби» — у пулі предметів і в HeroPixel', [O.includes(HeroPixel.ITEMS.indexOf('Браслет дружби')), HeroPixel.ITEMS.length], [true, 9]);
+  eq('Боб дарує наступний предмет за порядком', (() => { const B = mk('78', 'bob', 'f', ['domovlenosti']); B.items = [O[0]]; return giftAcc(B); })(), CONFIG.costume.acc[O[1]]);
+  // Перший крок — Дружба
+  const FR = (g, f) => { const X = mk(g, 'friend', 'm', ['druzhba']); A.next(X); f(X); return { X, s: X.st.friend, sc: ST.friend.score(X.st.friend, ctxOf(X, 'friend')) }; };
+  const f8 = FR('78', X => { eq('Дружба 7–8: без коду «Далі» вимкнене', ST.friend.canNext(X.st.friend), false); A.act(X, 'code', 'offer'); A.next(X);
+    eq('Дружба 7–8: проба 2 без відміток — «Далі» вимкнене', [X.st.friend.step, ST.friend.canNext(X.st.friend)], ['no', false]); ['sad', 'later', 'other'].forEach(m => A.act(X, 'mark', m)); A.next(X); });
+  eq('Дружба 7–8: попроситься + своє → 3; кілька кодів (1, 2, 2) → максимум 2', [f8.sc.p1.level, f8.sc.p2.level, f8.s.done, ceilAvgN(f8.sc.p1.level, f8.sc.p2.level)], [3, 2, true, 3]);
+  eq('Дружба 7–8: лише коди зі значенням 1 → 1; «2+ варіанти» → 3', [friendNoLevel(['sad', 'angry']), friendNoLevel(['sad', 'twoPlus']), friendNoLevel(['later'])], [1, 3, 2]);
+  eq('Дружба 7–8: «Усі відповіді»', ST.friend.codes(f8.s, ctxOf(f8.X, 'friend')), ['F1 код 3 (попроситься й запропонує своє)', 'F2 коди: 1 засмутиться, 2 спробує пізніше, 2 інший варіант']);
+  const f9 = FR('910', X => { A.act(X, 'code', 'ask'); A.next(X); eq('Дружба 9–10: перед пінг-понгом — «Старт 60 с»', [X.st.friend.step, ST.friend.nextLabel(X.st.friend)], ['pingReady', 'Старт 60 с']);
+    A.next(X); eq('Дружба 9–10: таймер 60 с', Math.round((X.st.friend.endsAt - Date.now()) / 1000), 60); A.act(X, 'ask'); A.act(X, 'ask'); X.st.friend.endsAt = Date.now() - 1; A.tick(X);
+    eq('Дружба 9–10: час вийшов — станція чекає «Далі»', [X.st.friend.ended, X.st.friend.done], [true, undefined]); A.next(X); });
+  eq('Дружба 9–10: питання за темою → 2; 2 зустрічні питання → 3', [f9.sc.p1.level, f9.sc.p2.level, f9.s.done], [2, 3, true]);
+  const PT = CONFIG.thresholds.friend;
+  eq('Дружба 9–10: пінг-понг — 1 питання → 2; лише «ділиться» → 2; 0 → 1', [friendPingLevel(1, false, PT), friendPingLevel(0, true, PT), friendPingLevel(0, false, PT), friendPingLevel(3, false, PT)], [2, 2, 1, 3]);
+  eq('Дружба 9–10: «Усі відповіді» — F1 код 2 | F2 питань: 2', ST.friend.codes(f9.s, ctxOf(f9.X, 'friend')).join(' | '), 'F1 код 2 (питання за темою) | F2 питань: 2');
+  const f9s = FR('910', X => { A.act(X, 'code', 'askShare'); A.next(X); A.skipProbe(X); });
+  eq('Дружба 9–10: пропуск пінг-понгу → рівень за пробою 1', [f9s.s.done, f9s.sc.p1.level, f9s.sc.p2, scoreAll(f9s.X).friend.level], [true, 3, null, 3]);
   // Рядок таблиці
-  const SR = mk('78', 'emotions'); SR.st.emotions = e1.S.st.emotions; SR.st.safe = sf; SR.st.money = m8; SR.st.playground = { done: true, skipped: true };
+  const SR = mk('78', 'emotions', 'f', ['napoleglyvist', 'groshi', 'superechky']); SR.st.emotions = e1.S.st.emotions; SR.st.safe = sf; SR.st.money = m8; SR.st.playground = { done: true, skipped: true };
   SR.self.emotions = 2; SR.self.safe = 3; SR.t.lessonEnd = SR.t.lessonStart + 27.44 * 60000;
-  const rec = sheetRecord(SR), col = h => rec.row[rec.headers.indexOf(h)];
-  eq('Таблиця: 30 колонок у потрібному порядку', [rec.headers.length, rec.row.length, rec.headers.slice(0, 8), rec.headers[8], rec.headers[9], rec.headers[22], rec.headers.slice(-3)],
-    [30, 30, ['Дата й час', 'Ім’я', 'Прізвище', 'Вік', 'Вікова група', 'Стать', 'МІК', 'Тривалість, хв'], 'Емоції — результат', 'Емоції — що робити', 'Самооцінка', ['Загальний висновок / маршрут', 'PDF результату', 'id']]);
+  const rec = sheetRecord(SR), col = h => rec.row[rec.headers.indexOf(h)], hi = h => rec.headers.indexOf(h);
+  eq('Таблиця: 33 колонки в потрібному порядку', [rec.headers.length, rec.row.length, rec.headers.slice(0, 9), rec.headers[9], rec.headers[10], rec.headers.slice(21, 25), rec.headers[25], rec.headers.slice(-3)],
+    [33, 33, ['Дата й час', 'Ім’я', 'Прізвище', 'Вік', 'Вікова група', 'Стать', 'МІК', 'Обрані теми', 'Тривалість, хв'], 'Емоції — результат', 'Емоції — що робити', ['Голос і розмова — результат', 'Голос і розмова — що робити', 'Дружба — результат', 'Дружба — що робити'], 'Самооцінка', ['Загальний висновок / маршрут', 'PDF результату', 'id']]);
+  eq('Таблиця: «Обрані теми» одразу після «МІК»', [hi('Обрані теми') - hi('МІК'), col('Обрані теми')], [1, 'Мирне розв’язання суперечок, Наполегливість, Гроші']);
   eq('Таблиця: дата дд.мм.рррр гг:хх:сс, ім’я, прізвище, група, тривалість з 1 знаком', [/^\d\d\.\d\d\.\d{4} \d\d:\d\d:\d\d$/.test(col('Дата й час')), col('Ім’я'), col('Прізвище'), col('Вікова група'), col('Тривалість, хв'), col('МІК')], [true, 'Олеся', 'Іваненко', '7–8', 27.4, 'Марія']);
-  eq('Таблиця: колір навички й проби', [col('Емоції — результат') === '🟡 Росте · 🟢 Кадри: 6 з 6; 🔴 Способи заспокоїтися: 0', col('Вирішення суперечок — результат')], [true, '⚪ ' + CONFIG.report.skippedStation]);
+  eq('Таблиця: колір навички й проби; пропущена обрана станція', [col('Емоції — результат') === '🟡 Росте · 🟢 Кадри: 6 з 6; 🔴 Способи заспокоїтися: 0', col('Вирішення суперечок — результат')], [true, '⚪ ' + CONFIG.report.skippedStation]);
+  eq('Таблиця: невибрані навички — «На курсі», «що робити» порожня', [col('Дружба — результат'), col('Дружба — що робити'), col('Голос і розмова — результат'), col('Домовленості — результат'), col('Домовленості — що робити')], ['На курсі', '', 'На курсі', 'На курсі', '']);
   eq('Таблиця: «що робити» — 2 рекомендації через « | »', col('Емоції — що робити').split(' | ').length, 2);
   eq('Таблиця: самооцінка', col('Самооцінка').split(' | ').slice(0, 3), ['Емоції 2/3', 'Наполегливість 3/3', 'Гроші —']);
   const L = scoreAll(SR), lvls = SKILL_KEYS.flatMap(k => [L[k].p1 && L[k].p1.level, L[k].p2 && L[k].p2.level]).filter(x => typeof x === 'number');
-  eq('Таблиця: лічильники 🟢🟡🔴 по пробах', [col('Кількість 🟢'), col('Кількість 🟡'), col('Кількість 🔴')], [3, 2, 1].map(l => lvls.filter(x => x === l).length));
+  eq('Таблиця: лічильники 🟢🟡🔴 лише по оцінених пробах', [col('Кількість 🟢'), col('Кількість 🟡'), col('Кількість 🔴'), lvls.length], [...[3, 2, 1].map(l => lvls.filter(x => x === l).length), 6]);
   const ans = col('Усі відповіді');
   eq('Таблиця: «Усі відповіді» — коди проб', [ans.startsWith('K1 ✅ '), /\| K\* способів: \d/.test(ans), /\| S1 \d+ спр\./.test(ans), /\| S2 \d+ спр\., \d:\d\d, підказка/.test(ans), /\| C1 ✅ їжа ✅ вода/.test(ans), /C2 ✅ печиво в дорогу 7, ❌ квиток на човник 8 → 9/.test(ans), / \| M пропущено/.test(ans)], [true, true, true, true, true, true, true]);
+  eq('Таблиця: невибрані теми не пишуться в «Усі відповіді»', /(^| )(B1|R1|R гість|F1) /.test(ans), false);
   eq('Таблиця: маршрут — підсумок + 2 навички окремими рядками', col('Загальний висновок / маршрут').split('\n').length, 3);
   eq('Таблиця: назва PDF «Прізвище Ім’я — дата.pdf»', /^Іваненко Олеся — \d\d\.\d\d\.\d{4}\.pdf$/.test(rec.fileName), true);
-  // Рекомендації: лише «Прокидається» і «Росте», спершу 1, при рівності — де самооцінка вища за результат
+  { const R2 = mk('910', 'friend', 'm', ['druzhba']); R2.st.friend = f9.s; const r2 = sheetRecord(R2), c2 = h => r2.row[r2.headers.indexOf(h)];
+    eq('Таблиця: Дружба — результат і коди F', [c2('Дружба — результат'), /F1 код 2 \(питання за темою\) \| F2 питань: 2/.test(c2('Усі відповіді')), c2('Гроші — результат'), c2('Обрані теми')], ['🟢 Сильна · 🟡 Увійти в розмову: питання за темою; 🟢 Розмова-пінг-понг: питань: 2', true, 'На курсі', 'Дружба']); }
+  // Рекомендації: лише «Прокидається» і «Росте», пріоритет — обраним темам
   const LV = o => Object.fromEntries(SKILL_KEYS.map(k => [k, { level: o[k] }]));
   const RS = { setup: { name: 'Оля' }, self: {} };
   const Lmix = LV({ emotions: 3, safe: 3, money: 3, hike: 3, bob: 3, playground: 2, radio: 3 });   // друга «найслабша» — Сильна
@@ -916,9 +1066,10 @@ function selfTest() {
   { const w = pickStart(RS, Lmix)[0].why; eq('Рекомендації: людський текст без шаблону «простір для росту»', [/простір для росту|Рівень «/.test(w), w.startsWith('Оля вже пробує домовлятися')], [false, true]); }
   const Lord = LV({ emotions: 2, safe: 1, money: 2, hike: 3, bob: 2, playground: 3, radio: 3 });
   eq('Рекомендації: спершу «Прокидається», потім «Росте» з вищою самооцінкою', pickStart({ setup: { name: 'Оля' }, self: { emotions: 2, money: 3, bob: 1 } }, Lord).map(p => p.k), ['safe', 'money']);
+  eq('Рекомендації: пріоритет — обраним темам', pickStart({ setup: { name: 'Оля', topics: ['druzhba'] }, self: {} }, LV({ emotions: 1, hike: 1, friend: 2 })).map(p => p.k), ['friend', 'emotions']);
   const Lall = LV({ emotions: 3, safe: 3, money: 3, hike: 3, bob: 3, playground: 3, radio: 3 });
   eq('Рекомендації: усі «Сильна» — порожній список і текст про складніші завдання', [pickStart(RS, Lall).length, allStrong(Lall), /складніші завдання/.test(CONFIG.report.allStrong)], [0, true, true]);
-  eq('Таймінг: разом 30 хв', CONFIG.order.reduce((a, k) => a + CONFIG.locations[k].minutes, 0), 30);
+  if (typeof extra === 'function') extra(eq, mk, { e1, sf, m8, f8, f9 });
   eq('Рід: підстановка', [tplG('мрія{в|ла}', 'm'), tplG('мрія{в|ла}', 'f')], ['мріяв', 'мріяла']);
 
   const pass = R.filter(r => r.ok).length, fail = R.length - pass;
