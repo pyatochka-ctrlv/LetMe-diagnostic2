@@ -77,6 +77,10 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 /* теми діагностики */
 .say.small p{font-size:17px}
 .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.advice{display:flex;flex-direction:column;align-items:flex-start;gap:3px;max-width:470px;white-space:normal;line-height:1.3}
+.advice .hint{font-weight:500}
+.grid>.b:has(.advice){flex:1 1 calc(50% - 8px)}
+.letter{background:#FFFDF4;border:1px solid #EAD9A6;border-radius:10px;padding:10px 12px;font-size:15px;margin-bottom:10px}
 .tcard{display:flex;gap:10px;align-items:flex-start;text-align:left;font:inherit;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
 .tcard:hover{background:var(--soft)}
 .tcard.on{border-color:var(--accent);background:#F3F0FF;outline:2px solid var(--accent)}
@@ -250,10 +254,10 @@ function viewSetup() {
 // крок «Теми діагностики»: 6 карток-чекбоксів, від min до max тем, підсумок часу
 function viewTopics() {
   const tp = CONFIG.topicPick, sel = normTopics(S.setup.topics), n = sel.length;
-  const cards = CONFIG.topics.map(t => { const on = sel.includes(t.key), L = CONFIG.locations[t.station];
+  const cards = CONFIG.topics.map(t => { const on = sel.includes(t.key), L = loc(t.station, S.setup.group);
     return `<button class="tcard${on ? ' on' : ''}" data-g="topic" data-arg="${t.key}" role="checkbox" aria-checked="${on}"><span class="tbox">${on ? '✓' : ''}</span>
       <span class="tt"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span><span class="tmeta">${L.icon} ${esc(L.name)} · ≈${L.minutes} хв · модуль «${esc(t.module)}»</span></span></button>`; }).join('');
-  const core = CONFIG.core.map(c => `${CONFIG.locations[c.station].icon} ${esc(CONFIG.locations[c.station].name)} (${esc(c.name)})`).join(', ');
+  const core = CONFIG.core.map(c => `${loc(c.station).icon} ${esc(loc(c.station).name)} (${esc(c.name)})`).join(', ');
   return `<div class="panel"><h2 style="font:700 18px var(--head);margin:0 0 12px">${esc(tp.title)} <span class="req">*</span></h2>
     <div class="say small"><div class="lbl">Скажи батькам</div><p>${esc(tp.say)}</p></div>
     <div class="tgrid">${cards}</div>
@@ -275,6 +279,7 @@ function scriptVars() {
   if (key === 'playground' && gr === '78') v.text = c.C.judge.about;
   if (key === 'playground' && s.step === 'chat') v.say = (c.C.chat.messages[s.ci] || {}).say || '';
   if (key === 'radio') { v.guest = guestName(s); if (s.step === 'q') { const Q = c.C.questions[s.qi] || {}; v.say = fill(Q.say || '', { guest: v.guest }); v.quiet = Q.quiet || ''; v.wrap = Q.wrap || ''; } }
+  if (key === 'friend' && s.li !== undefined) { const Lt = c.C.letters[s.li] || {}; Object.assign(v, { say: Lt.say || '', quiet: Lt.quiet || '', short: Lt.short || '', after: Lt.after || '', to: Lt.to || '' }); }
   if (key === 'final' && s.list) { const k = s.list[s.bi]; v.selfQ = k ? skillOf(k).selfQ : ''; }
   return v;
 }
@@ -290,13 +295,14 @@ function scriptOf() {
   const R = CONFIG.script.bob.react;
   if (key === 'bob' && ['talk', 'trade', 'haggle', 'bye'].includes(s.step) && R[s.line]) sc = Object.assign({}, sc, { say: R[s.line] + (s.step === 'bye' ? ' ' + CONFIG.script.bob.bye.say : '') });
   const vars = scriptVars(), gr = S.setup.group, P = v => T(fill(fill(pick78(v, gr) || '', vars), vars));
-  return { say: P(sc.say), check: P(sc.check), expect: P(sc.expect), quiet: P(sc.quiet), active: P(sc.active), do: P(sc.do), dont: P(sc.dont) };
+  return { say: P(sc.say), check: P(sc.check), expect: P(sc.expect), quiet: P(sc.quiet), short: P(sc.short), active: P(sc.active), do: P(sc.do), dont: P(sc.dont) };
 }
-function codesBlock(key, buttonsFn) {
-  const C = CONFIG.codes[key], open = ui.ex[key];
+// exOf(it) — свої еталони для коду (напр., для кожного листа «Дружби»); без нього — it.ex
+function codesBlock(key, buttonsFn, exOf) {
+  const C = CONFIG.codes[key], open = ui.ex[key], exs = it => (exOf ? exOf(it) : it.ex) || [];
   return `<div class="codes"><div class="lbl">${esc(T(C.title))}</div>${C.note ? `<div class="hint">${esc(C.note)}</div>` : ''}<div class="grid">${C.items.map(buttonsFn).join('')}</div>
     <div>${b(`data-g="ex" data-arg="${key}"`, open ? 'Сховати приклади' : 'Приклади', { cls: 'ghost' })}</div>
-    ${open ? `<div class="ex">${C.items.map(it => `<div><b>${esc(T(it.label))}:</b> ${(it.ex || []).map(e => esc(T(e))).join(' · ')}</div>`).join('')}</div>` : ''}</div>`;
+    ${open ? `<div class="ex">${C.items.map(it => `<div><b>${esc(T(it.label))}${it.v ? ` (${it.v})` : ''}:</b> ${exs(it).map(e => esc(T(e))).join(' · ')}</div>`).join('')}</div>` : ''}</div>`;
 }
 function timerHTML(ends) { return ends ? `<span class="timer" data-ends="${ends}">${fmtTime(Math.ceil((ends - Date.now()) / 1000))}</span>` : ''; }
 
@@ -397,20 +403,16 @@ IN.radio = s => {
     <div style="margin-top:10px">${codesBlock('radioOpinion', it => act('mark', it.id, it.label, { cls: s.marks.includes(it.id) ? 'sel' : '' }))}</div>`;
   return '';
 };
-// Перший крок — Дружба: коди лише на пульті (з еталонами — «Приклади»)
+// Дружба — листи з порадами: текст листа, один код (з повними описами й еталонами цього листа), «Порада коротко»
 IN.friend = s => {
-  const C = ctx().C, lab = it => `${esc(T(it.label))} <span class="hint">· ${it.v}</span>`;
-  const one = set => codesBlock(set, it => act('code', it.id, lab(it), { cls: s.p1 === it.id ? 'sel' : '' }));
-  if (s.step === 'join') return one('friendJoin');
-  if (s.step === 'no') return `<div class="info">Однолітка на екрані: «${esc(C.no)}»</div>` + codesBlock('friendNo', it => act('mark', it.id, lab(it), { cls: s.marks.includes(it.id) ? 'sel' : '' }));
-  if (s.step === 'enter') return `<div class="info">Розмова на екрані: ${C.talk.map(t => `«${esc(t)}»`).join(' — ')}</div>` + one('friendEnter');
-  if (s.step === 'pingReady' || s.step === 'ping') {
-    const P = C.peer;
-    const top = s.step === 'ping' ? `<div class="info">Час (видно лише тобі): ${s.running ? timerHTML(s.endsAt) : '<b>час вийшов</b>'} · зустрічних питань: <b>${s.q}</b>${s.share ? ' · ділиться своїм ✓' : ''}</div>` : `<div class="info">Репліка однокласника: «${esc(P.line)}»</div>`;
-    return top + codesBlock('friendPing', it => (it.id === 'ask' ? act('ask', undefined, '+1 зустрічне питання <span class="hint">(пробіл)</span>', { cls: 'big', disabled: s.step !== 'ping' }) : act('share', undefined, esc(it.label), { cls: s.share ? 'sel' : '' })))
-      + `<div class="cheat"><div class="lbl">Шпаргалка: як відповідати від імені однокласника</div><ul>${P.answers.map(x => `<li><b>${esc(x.about)}:</b> ${esc(T(x.a))}</li>`).join('')}</ul><div class="lbl">Щоб завершити</div><p>${esc(T(P.close))}</p></div>`;
-  }
-  return '';
+  if (s.step !== 'letter' && s.step !== 'reply') return '';
+  const C = ctx().C, Lt = C.letters[s.li], gr = S.setup.group, max = CONFIG.thresholds.friend.tipMax;
+  const letter = `<div class="letter"><div class="lbl">Лист ${s.li + 1} з ${C.letters.length} · ${esc(Lt.title)}${gr === '78' ? ' — читай уголос' : ' — дитина читає сама, якщо важко — читаєш ти'}</div>«${esc(T(Lt.text))}» <i>— ${esc(Lt.from)}</i></div>`;
+  const tip = `<div class="lbl" style="margin-top:12px">Порада коротко <span style="text-transform:none;letter-spacing:0;font-weight:600">— необов’язково, до ${max} символів; побачить дитина після «Надіслати пораду»</span></div>
+    <input class="inp" id="f-tip" data-tip="1" maxlength="${max}" value="${esc(s.tips[s.li] || '')}" placeholder="суть поради словами дитини" style="max-width:560px">`;
+  if (s.step === 'letter') return letter + codesBlock('friendAdvice', it => act('code', it.id, `<span class="advice"><b>${esc(T(it.label))} · ${it.v}</b><span class="hint">${esc(T(it.desc))}</span></span>`, { cls: s.codes[s.li] === it.id ? 'sel' : '' }), it => Lt.ex[it.id]) + tip;
+  const c = adviceCode(s.codes[s.li]);
+  return `<div class="info">Порада надіслана${c ? ` · код: <b>${esc(c.label)} (${c.v})</b>` : ''}. На екрані дитини: <b id="thx">${esc(T(friendThanks(S, s, gr)))}</b></div>` + tip;
 };
 IN.final = s => {
   if (s.step !== 'batteries') return '';
@@ -423,7 +425,7 @@ function stageList() {
   const lm = S.t.lessonStart ? Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000) : 0;
   const R = routeOfS(S);
   return `<div class="panel"><div class="lbl">Етапи</div><div class="stages">${R.map(k => {
-    const s = S.st[k], L = CONFIG.locations[k], cur = k === S.cur && S.phase === 'lesson';
+    const s = S.st[k], L = loc(k, S.setup.group), cur = k === S.cur && S.phase === 'lesson';
     const st = !s ? 'не почато' : s.skipped ? 'пропущено' : s.done ? 'пройдено' : 'триває';
     return `<div class="stg${cur ? ' cur' : ''}${s && s.done && !s.skipped ? ' done' : ''}${s && s.skipped ? ' skip' : ''}"><span>${L.icon} ${esc(L.name)} <span class="st">· ${st}</span></span><span class="st">${L.minutes} хв</span></div>`;
   }).join('')}</div><div class="total" id="total">${lm} хв з ≈${planOf(R)}</div></div>`;
@@ -434,7 +436,7 @@ function viewLesson() {
   const label = s.step === 'done' ? 'Далі: наступна локація' : (M.nextLabel ? M.nextLabel(s) : 'Далі');
   const canSkip = !s.done && key !== 'hero' && key !== 'final';
   const guide = [sc.check && `<div class="check"><div class="lbl">Що перевіряємо</div>${esc(sc.check)}</div>`, sc.expect && `<div><div class="lbl">Чого очікувати</div>${esc(sc.expect)}</div>`,
-    sc.do && `<div><div class="lbl">Що робиш ти</div>${esc(sc.do)}</div>`, sc.quiet && `<div><div class="lbl">Якщо дитина мовчить або думає довго</div>${esc(sc.quiet)}</div>`,
+    sc.do && `<div><div class="lbl">Що робиш ти</div>${esc(sc.do)}</div>`, sc.quiet && `<div><div class="lbl">Якщо дитина мовчить або думає довго</div>${esc(sc.quiet)}</div>`, sc.short && `<div><div class="lbl">Якщо коротка відповідь</div>${esc(sc.short)}</div>`,
     sc.active && `<div><div class="lbl">Якщо дуже активна й говорить довго</div>${esc(sc.active)}</div>`, sc.dont && `<div class="dont"><div class="lbl" style="color:var(--red)">Не кажи</div>${esc(sc.dont)}</div>`].filter(Boolean).join('');
   return `<div class="lesson">${stageList()}<div>
     <div class="panel"><div class="say"><div class="lbl">Скажи дитині</div><p>${esc(sc.say || '')}</p></div><div class="guide">${guide}</div></div>
@@ -690,6 +692,7 @@ function doAct(name, arg) {
 }
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.dataset.tip) { A.act(S, 'tip', t.value); SYNC.publish(S); const th = document.getElementById('thx'); if (th) th.textContent = T(friendThanks(S, S.st.friend, S.setup.group)); return; }
   if (t.dataset.guest) { A.act(S, 'guest', t.value); SYNC.publish(S); const nb = document.querySelector('[data-g="next"]'); if (nb) nb.disabled = !ST.radio.canNext(S.st.radio); return; }
   const k = t.dataset.bind; if (!k) return;
   S.setup[k] = t.value; SYNC.publish(S);
@@ -698,7 +701,7 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (S.phase !== 'lesson') return;
-  if (e.key === ' ') { const s = S.st[S.cur]; e.preventDefault(); if (S.cur === 'emotions' && s && s.step === 'calm') doAct('plus'); if (S.cur === 'friend' && s && s.step === 'ping') doAct('ask'); }
+  if (e.key === ' ') { const s = S.st[S.cur]; e.preventDefault(); if (S.cur === 'emotions' && s && s.step === 'calm') doAct('plus'); }
   if (e.key === 'Enter') { e.preventDefault(); const nb = document.querySelector('[data-g="next"]'); if (nb && !nb.disabled) { const now = Date.now(); if (now - ui.lastT >= 450) { ui.lastT = now; GA.next(); } } }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'я')) { e.preventDefault(); doUndo(); }
 });
@@ -732,7 +735,8 @@ function reportTests(eq, mk, D) {
   eq('Звіт: 4 оцінені навички — радар; невибрані — лише в «Що ще розвиває курс»', [h2.includes('class="radar"'), (t2.slice(t2.indexOf('Що ще розвиває курс')).match(/Цю навичку ми розглянемо на курсі/g) || []).length, /Впевненість|Вміння домовлятися/.test(t2.slice(0, t2.indexOf('Що ще розвиває курс')))], [true, 4, false]);
   { const Z = mk('78', 'final', 'f', ['napoleglyvist']); Z.st.safe = JSON.parse(JSON.stringify(D.sf)); Z.st.safe.locks[1].stuckAt = null; Z.st.safe.locks[1].hint = null; Z.phase = 'report';
     const tz = text(reportFor(Z)); eq('Звіт: Сейф без «застрягла» — про допомогу без «не оцінено»', [/не оцінено|пропущено/i.test(tz), tz.includes(CONFIG.report.safeNoStuck)], [false, true]); }
-  eq('Звіт: «На що звернемо увагу» — пріоритет обраним темам', pickStart(Y, scoreAll(Y)).every(p => chosenStations(Y).includes(p.k)) || pickStart(Y, scoreAll(Y)).length === 0, true);
+  { const ch = chosenStations(Y), LY = scoreAll(Y), pk = pickStart(Y, LY).map(p => ch.includes(p.k) ? 1 : 0), weakChosen = ch.filter(k => LY[k].level && LY[k].level < 3).length;
+    eq('Звіт: «На що звернемо увагу» — обрані теми першими', [pk.every((v, i) => !i || v <= pk[i - 1]), pk.filter(Boolean).length === Math.min(2, weakChosen)], [true, true]); }
 }
 if (new URLSearchParams(location.search).get('test') === '1') selfTest(reportTests);
 </script>

@@ -42,7 +42,11 @@ html += '<h2>Персонажі станцій</h2><div class="row">'
   + fig(H.render({ style: 'b', head: 'shadow', cape: '#3D8BFF', scale: 4 }), 'силует гостя (Радіо)')
   + fig(H.render({ style: 'b', head: 'shadow', cape: '#E63946', scale: 4, expression: 'joy' }), 'гість — усмішка')
   + fig(H.render({ style: 'b', head: 'cat', cape: '#2EC4B6', scale: 4 }), 'котик (Майданчик)')
-  + ['lion', 'fox', 'panda', 'frog'].map((h, i) => fig(H.render({ style: 'b', head: h, cape: ['#FF5A5F', '#3D8BFF', '#FF9F1C', '#2EC4B6'][i], scale: 4, expression: i ? undefined : 'joy' }), h + ' — однолітки (Перший крок)')).join('')
+  + fig(H.renderProp('bird', { scale: 5 }), 'пташка-листоноша') + fig(H.renderProp('bird', { scale: 5, frame: 1 }), 'пташка — політ')
+  + fig(H.renderProp('bird', { scale: 5, letter: true }), 'пташка з листом') + fig(H.renderProp('bird', { scale: 5, frame: 1, letter: true }), 'пташка з листом — політ')
+  + fig(H.renderProp('mailbox', { scale: 5 }), 'поштова скринька')
+  + [['panda', 'sad', 'Поні — сумна'], ['panda', 'joy', 'Поні — рада'], ['frog', 'anxiety', 'Квача — хвилюється'], ['frog', 'joy', 'Квача — рада'], ['lion', 'sad', 'Лев — сумний'], ['lion', 'joy', 'Лев — радий']]
+      .map(([h, e, n]) => fig(H.render({ style: 'b', head: h, cape: '#FF7EB6', scale: 4, expression: e }), n + ' (Пташина пошта)')).join('')
   + fig(H.render({ style: 'b', head: 'fox', cape: '#FF7EB6', scale: 4, blink: true }), 'моргання')
   + fig(H.renderSpark({ scale: 5 }), 'Іскра, кадр 1') + fig(H.renderSpark({ scale: 5, frame: 1 }), 'Іскра, кадр 2')
   + fig(H.renderSpark({ scale: 5, mic: true }), 'Іскра з мікрофоном') + '</div>';

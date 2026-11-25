@@ -89,9 +89,19 @@ function chosenStations(S) { const set = new Set(normTopics(S.setup.topics).map(
 function chosenNames(S) { return normTopics(S.setup.topics).map(k => topicByKey(k).name); }
 function locWords(n) { return CONFIG.locWords[n] || `${n} ${pl(n, ['локація', 'локації', 'локацій'])}`; }
 function routeLocs(S) { return locWords(routeOfS(S).filter(k => k !== 'hero' && k !== 'final').length); }
-// предмети костюма — за порядком проходження; корона — у фіналі
-function nextItem(S) { return CONFIG.costume.order[S.items.filter(i => i !== CONFIG.costume.final).length]; }
-function giftAcc(S) { const it = nextItem(S); return it === undefined ? '' : CONFIG.costume.acc[it]; }
+// предмети костюма — за порядком проходження; станції з fixed (Дружба) — свій предмет; корона — у фіналі
+function nextItem(S, key) {
+  const fixed = CONFIG.costume.fixed || {};
+  if (key && fixed[key] !== undefined) return S.items.includes(fixed[key]) ? undefined : fixed[key];
+  const reserved = new Set(Object.values(fixed));
+  return CONFIG.costume.order.find(i => !reserved.has(i) && i !== CONFIG.costume.final && !S.items.includes(i));
+}
+function giftAcc(S) { const it = nextItem(S, S.cur); return it === undefined ? '' : CONFIG.costume.acc[it]; }
+// назва й іконка локації з урахуванням групи (Дружба: «Пташина пошта» / «Дружня газета»); без групи — обидві через « / »
+function loc(k, g) {
+  const L = CONFIG.locations[k], pk = v => (v && typeof v === 'object' ? (v[g] || Object.values(v).join(' / ')) : v);
+  return Object.assign({}, L, { name: pk(L.name), icon: pk(L.icon) });
+}
 
 /* ---------------- стан ---------------- */
 function freshState(sound = true) {
@@ -207,7 +217,7 @@ const ST = {};
 function stationDone(S, key, s) {
   s.step = 'done'; s.done = true; s.t1 = Date.now(); closeProbe(s);
   if (s.item !== undefined) return;
-  const it = nextItem(S);   // наступний предмет зі списку — за порядком проходження, а не за станцією
+  const it = nextItem(S, key);   // наступний предмет зі списку за порядком проходження (або «свій» предмет станції)
   if (it !== undefined && !S.items.includes(it)) { S.items.push(it); s.item = it; fx(S, 'item', { item: it, key }); }
 }
 function closeProbe(s) { const p = s.curP; if (p && s.pt && s.pt[p] && !s.pt[p].end) s.pt[p].end = Date.now(); }
@@ -657,57 +667,49 @@ ST.radio = {
 };
 function guestName(s) { return s && s.guestMode === 'named' && s.guest ? s.guest : CONFIG.content.radio.hostIskra; }
 
-/* ---------- 8. Перший крок — Дружба ----------
-   7–8: «Як приєднатися» (один код) → «Якщо сказали “ні”» (кілька кодів, рівень — максимум).
-   9–10: «Увійти в розмову» (один код) → «Розмова-пінг-понг» 60 с (лічильник зустрічних питань + «ділиться своїм»). */
-function friendCode(set, id) { return CONFIG.codes[set].items.find(i => i.id === id) || null; }
-function friendNoLevel(marks) { const v = marks.map(id => (friendCode('friendNo', id) || { v: 0 }).v); return v.length ? Math.max(...v) : null; }
-function friendPingLevel(q, share, T) { return q >= T.ping.l3 ? 3 : (q >= T.ping.l2 || share) ? 2 : 1; }
+/* ---------- 8. Дружба — листи з порадами ----------
+   7–8 «Пташина пошта», 9–10 «Дружня газета острова». Два листи = дві проби: intro → letter → reply → letter → reply.
+   На кожен лист МІК обирає один код (рівень = значення коду) і, за бажанням, «Пораду коротко» (до 60 символів) —
+   її дитина побачить у грі після «Надіслати пораду». Рівень станції — ceilAvg двох листів. */
+function adviceCode(id) { return CONFIG.codes.friendAdvice.items.find(i => i.id === id) || null; }
+// «Порада коротко»: один рядок, без зайвих пробілів, до tipMax символів (лапки й апострофи — як є)
+function cleanTip(t) { return String(t ?? '').replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').replace(/^\s+/, '').slice(0, CONFIG.thresholds.friend.tipMax); }
+function tipOf(s, i) { return ((s.tips && s.tips[i]) || '').trim(); }
+// що бачить дитина після поради (однаково тепло за будь-якого коду)
+function friendThanks(S, s, g) {
+  const C = ctxOf(S, 'friend').C, tip = tipOf(s, s.li);
+  if (g === '78') return tip ? fill(C.thanksTip, { tip }) : C.thanks;
+  return tip || C.printed;
+}
 ST.friend = {
-  init: () => ({ step: 'intro', p1: null, marks: [], q: 0, share: false, endsAt: null, running: false, ended: false, skip: {} }),
-  probeOf: s => (['intro', 'join', 'enter'].includes(s.step) ? 1 : ['no', 'pingReady', 'ping'].includes(s.step) ? 2 : null),
-  canNext: s => (s.step === 'join' || s.step === 'enter' ? !!s.p1 : s.step === 'no' ? s.marks.length > 0 : true),
-  nextLabel: s => (s.step === 'pingReady' ? 'Старт 60 с' : s.step === 'ping' ? 'Завершити розмову' : 'Далі'),
-  next(S, s, ctx) {
-    if (s.step === 'intro') s.step = ctx.g === '78' ? 'join' : 'enter';
-    else if (s.step === 'join') s.step = 'no';
-    else if (s.step === 'enter') s.step = 'pingReady';
-    else if (s.step === 'pingReady') { s.step = 'ping'; s.running = true; s.endsAt = Date.now() + ctx.T.pingSec * 1000; }
-    else if (s.step === 'no' || s.step === 'ping') { s.running = false; stationDone(S, 'friend', s); }
+  init: () => ({ step: 'intro', li: 0, codes: [null, null], tips: ['', ''], skip: {} }),
+  probeOf: s => (s.step === 'intro' || s.li === 0 ? 1 : 2),
+  canNext: s => (s.step === 'letter' ? !!s.codes[s.li] : true),
+  nextLabel: s => (s.step === 'letter' ? 'Надіслати пораду' : s.step === 'reply' && s.li === 0 ? 'Далі: другий лист' : 'Далі'),
+  next(S, s) {
+    if (s.step === 'intro') { s.step = 'letter'; s.li = 0; }
+    else if (s.step === 'letter') { s.step = 'reply'; fx(S, 'sent'); }
+    else if (s.step === 'reply') { if (s.li === 0) { s.li = 1; s.step = 'letter'; } else stationDone(S, 'friend', s); }
   },
   act: {
-    code(S, s, id) { if ((s.step !== 'join' && s.step !== 'enter') || !friendCode(s.step === 'join' ? 'friendJoin' : 'friendEnter', id)) return false; s.p1 = s.p1 === id ? null : id; },
-    mark(S, s, id) { if (s.step !== 'no' || !friendCode('friendNo', id)) return false; const k = s.marks.indexOf(id); if (k >= 0) s.marks.splice(k, 1); else s.marks.push(id); },
-    ask(S, s) { if (s.step !== 'ping') return false; s.q++; fx(S, 'sparkle'); },
-    share(S, s) { if (s.step !== 'ping' && s.step !== 'pingReady') return false; s.share = !s.share; }
+    code(S, s, id) { if (s.step !== 'letter' || !adviceCode(id)) return false; s.codes[s.li] = s.codes[s.li] === id ? null : id; },
+    tip(S, s, text) { if (s.step !== 'letter' && s.step !== 'reply') return false; s.tips[s.li] = cleanTip(text); }
   },
-  skipProbe(S, s, ctx) {
-    if (['intro', 'join', 'enter'].includes(s.step)) { s.skip.p1 = true; s.step = ctx.g === '78' ? 'no' : 'pingReady'; }
-    else { s.skip.p2 = true; s.running = false; stationDone(S, 'friend', s); }
+  skipProbe(S, s) {
+    if (s.step === 'intro' || s.li === 0) { s.skip.p1 = true; s.codes[0] = null; s.li = 1; s.step = 'letter'; }
+    else { s.skip.p2 = true; s.codes[1] = null; stationDone(S, 'friend', s); }
   },
-  tick(S, s) { if (s.step === 'ping' && s.running && Date.now() >= s.endsAt) { s.running = false; s.ended = true; fx(S, 'timer'); return true; } },
-  score(s, ctx) {
-    const set1 = ctx.g === '78' ? 'friendJoin' : 'friendEnter', c1 = s.p1 && friendCode(set1, s.p1);
-    const p1 = s.skip.p1 || !c1 ? null : { level: c1.v, short: c1.short, ev: `${ctx.g === '78' ? 'Щоб пограти з дітьми, герой' : 'Щоб приєднатися до розмови, герой'} ${c1.label.charAt(0).toLowerCase() + c1.label.slice(1)}`, raw: { code: s.p1 } };
-    let p2 = null;
-    if (!s.skip.p2 && ctx.g === '78' && s.marks.length) {
-      const it = s.marks.map(id => friendCode('friendNo', id)), lv = friendNoLevel(s.marks);
-      p2 = { level: lv, short: it.map(x => x.short).join(', '), ev: `Після відмови «${ctx.C.no}» герой: ${it.map(x => x.short).join('; ')}`, raw: { marks: s.marks } };
-    }
-    if (!s.skip.p2 && ctx.g === '910' && (s.running || s.ended || s.done) && s.endsAt) {
-      const n = `${s.q} ${pl(s.q, ['зустрічне питання', 'зустрічні питання', 'зустрічних питань'])}`;
-      p2 = { level: friendPingLevel(s.q, s.share, ctx.T), short: `питань: ${s.q}${s.share ? ', ділиться своїм' : ''}`, ev: `Розмова за ${ctx.T.pingSec} с: ${n}${s.share ? '; ділиться своїм досвідом у тему' : ''}`, raw: { q: s.q, share: s.share } };
-    }
-    return { p1, p2 };
+  probe(s, ctx, i) {
+    const c = adviceCode(s.codes[i]); if (s.skip['p' + (i + 1)] || !c) return null;
+    const Lt = ctx.C.letters[i], tip = tipOf(s, i);
+    return { level: c.v, short: tip ? `«${tip}»` : c.short,
+      ev: tip ? `Поради{в|ла} ${Lt.to}: «${tip}»` : `Порада для ${Lt.to}: ${c.rep}`, raw: { code: c.id, tip } };
   },
-  // «Усі відповіді»: F1 код 3 | F2 коди: 1 засмутиться, 2 інший варіант (7–8) / F2 питань: 2, ділиться своїм (9–10)
-  codes(s, ctx) {
-    const c1 = s.p1 && friendCode(ctx.g === '78' ? 'friendJoin' : 'friendEnter', s.p1), out = [];
-    out.push(s.skip.p1 ? 'F1 пропущено' : `F1 код ${c1 ? c1.v : '—'}${c1 ? ` (${c1.short})` : ''}`);
-    if (s.skip.p2) out.push('F2 пропущено');
-    else if (ctx.g === '78') out.push(`F2 коди: ${s.marks.map(id => { const c = friendCode('friendNo', id); return `${c.v} ${c.short}`; }).join(', ') || '—'}`);
-    else out.push(`F2 питань: ${s.q}${s.share ? ', ділиться своїм' : ''}`);
-    return out;
+  score(s, ctx) { return { p1: ST.friend.probe(s, ctx, 0), p2: ST.friend.probe(s, ctx, 1) }; },
+  // «Усі відповіді»: F1 код 3 «Підійди і спитай…» | F2 код 2 «Поговорити з Максом»
+  codes(s) {
+    return [0, 1].map(i => { const c = adviceCode(s.codes[i]), tip = tipOf(s, i), n = 'F' + (i + 1);
+      return s.skip['p' + (i + 1)] ? `${n} пропущено` : c ? `${n} код ${c.v}${tip ? ` «${tip}»` : ''}` : `${n} —`; });
   }
 };
 
@@ -1014,29 +1016,39 @@ function selfTest(extra) {   // extra(eq, mk, дані) — додаткові �
   // ceilAvg і костюм
   eq('ceilAvg з пропущеними пробами', [ceilAvgN(3, null), ceilAvgN(2, 3), ceilAvgN(null, null)], [3, 3, null]);
   const walk = topics => { const W = mk('78', 'emotions', 'f', topics); while (W.cur !== 'final') { A.skipStation(W); A.next(W); } A.next(W); return W; };
-  const O = CONFIG.costume.order, W1 = walk(['druzhba', 'vpevnenist']), W2 = walk(['groshi', 'napoleglyvist', 'druzhba']);
-  eq('Костюм: предмети за порядком проходження (2 теми)', [W1.items, W1.st.emotions.item, W1.st.friend.item, W1.st.radio.item, W1.st.hike.item], [O.slice(0, 4).concat([CONFIG.costume.final]), O[0], O[1], O[2], O[3]]);
-  eq('Костюм: інший маршрут — той самий порядок предметів, корона у фіналі', [W2.items.slice(0, 5), W2.st.friend.item, W2.st.money.item], [O.slice(0, 5), O[1], O[3]]);
+  const FX = CONFIG.costume.fixed, O = CONFIG.costume.order.filter(i => !Object.values(FX).includes(i)), BR = HeroPixel.ITEMS.indexOf('Браслет дружби');
+  const W1 = walk(['druzhba', 'vpevnenist']), W2 = walk(['groshi', 'napoleglyvist', 'druzhba']);
+  eq('Костюм: Дружба — завжди браслет, інші — за порядком проходження (2 теми)', [W1.items, W1.st.emotions.item, W1.st.friend.item, W1.st.radio.item, W1.st.hike.item], [[O[0], BR, O[1], O[2], CONFIG.costume.final], O[0], BR, O[1], O[2]]);
+  eq('Костюм: інший маршрут — браслет на Дружбі, решта в тому самому порядку', [W2.st.emotions.item, W2.st.friend.item, W2.st.safe.item, W2.st.money.item, W2.st.hike.item], [O[0], BR, O[1], O[2], O[3]]);
+  eq('Костюм: без Дружби браслет не видається', walk(['groshi', 'vpevnenist']).items.includes(BR), false);
   const WF = mk('78', 'emotions', 'f', ['vpevnenist']); A.skipStation(WF); A.next(WF); A.skipStation(WF); A.next(WF); A.skipStation(WF); A.next(WF); A.next(WF);
   eq('Костюм: корона — завжди у фіналі', [WF.items.includes(CONFIG.costume.final), WF.items[WF.items.length - 1]], [true, CONFIG.costume.final]);
-  eq('Костюм: «Браслет дружби» — у пулі предметів і в HeroPixel', [O.includes(HeroPixel.ITEMS.indexOf('Браслет дружби')), HeroPixel.ITEMS.length], [true, 9]);
+  eq('Костюм: «Браслет дружби» — у HeroPixel, предмет станції Дружба', [BR, FX.friend, HeroPixel.ITEMS.length], [8, 8, 9]);
   eq('Боб дарує наступний предмет за порядком', (() => { const B = mk('78', 'bob', 'f', ['domovlenosti']); B.items = [O[0]]; return giftAcc(B); })(), CONFIG.costume.acc[O[1]]);
-  // Перший крок — Дружба
-  const FR = (g, f) => { const X = mk(g, 'friend', 'm', ['druzhba']); A.next(X); f(X); return { X, s: X.st.friend, sc: ST.friend.score(X.st.friend, ctxOf(X, 'friend')) }; };
-  const f8 = FR('78', X => { eq('Дружба 7–8: без коду «Далі» вимкнене', ST.friend.canNext(X.st.friend), false); A.act(X, 'code', 'offer'); A.next(X);
-    eq('Дружба 7–8: проба 2 без відміток — «Далі» вимкнене', [X.st.friend.step, ST.friend.canNext(X.st.friend)], ['no', false]); ['sad', 'later', 'other'].forEach(m => A.act(X, 'mark', m)); A.next(X); });
-  eq('Дружба 7–8: попроситься + своє → 3; кілька кодів (1, 2, 2) → максимум 2', [f8.sc.p1.level, f8.sc.p2.level, f8.s.done, ceilAvgN(f8.sc.p1.level, f8.sc.p2.level)], [3, 2, true, 3]);
-  eq('Дружба 7–8: лише коди зі значенням 1 → 1; «2+ варіанти» → 3', [friendNoLevel(['sad', 'angry']), friendNoLevel(['sad', 'twoPlus']), friendNoLevel(['later'])], [1, 3, 2]);
-  eq('Дружба 7–8: «Усі відповіді»', ST.friend.codes(f8.s, ctxOf(f8.X, 'friend')), ['F1 код 3 (попроситься й запропонує своє)', 'F2 коди: 1 засмутиться, 2 спробує пізніше, 2 інший варіант']);
-  const f9 = FR('910', X => { A.act(X, 'code', 'ask'); A.next(X); eq('Дружба 9–10: перед пінг-понгом — «Старт 60 с»', [X.st.friend.step, ST.friend.nextLabel(X.st.friend)], ['pingReady', 'Старт 60 с']);
-    A.next(X); eq('Дружба 9–10: таймер 60 с', Math.round((X.st.friend.endsAt - Date.now()) / 1000), 60); A.act(X, 'ask'); A.act(X, 'ask'); X.st.friend.endsAt = Date.now() - 1; A.tick(X);
-    eq('Дружба 9–10: час вийшов — станція чекає «Далі»', [X.st.friend.ended, X.st.friend.done], [true, undefined]); A.next(X); });
-  eq('Дружба 9–10: питання за темою → 2; 2 зустрічні питання → 3', [f9.sc.p1.level, f9.sc.p2.level, f9.s.done], [2, 3, true]);
-  const PT = CONFIG.thresholds.friend;
-  eq('Дружба 9–10: пінг-понг — 1 питання → 2; лише «ділиться» → 2; 0 → 1', [friendPingLevel(1, false, PT), friendPingLevel(0, true, PT), friendPingLevel(0, false, PT), friendPingLevel(3, false, PT)], [2, 2, 1, 3]);
-  eq('Дружба 9–10: «Усі відповіді» — F1 код 2 | F2 питань: 2', ST.friend.codes(f9.s, ctxOf(f9.X, 'friend')).join(' | '), 'F1 код 2 (питання за темою) | F2 питань: 2');
-  const f9s = FR('910', X => { A.act(X, 'code', 'askShare'); A.next(X); A.skipProbe(X); });
-  eq('Дружба 9–10: пропуск пінг-понгу → рівень за пробою 1', [f9s.s.done, f9s.sc.p1.level, f9s.sc.p2, scoreAll(f9s.X).friend.level], [true, 3, null, 3]);
+  // Дружба — листи з порадами
+  const FR = (g, codes, tips, skip) => { const X = mk(g, 'friend', 'f', ['druzhba']); A.next(X);
+    [0, 1].forEach(i => { if (skip === i) { A.skipProbe(X); return; } if (codes[i]) A.act(X, 'code', codes[i]); if (tips && tips[i] !== undefined) A.act(X, 'tip', tips[i]); A.next(X); if (X.st.friend.step === 'reply') A.next(X); });
+    return { X, s: X.st.friend, sc: ST.friend.score(X.st.friend, ctxOf(X, 'friend')), L: scoreAll(X).friend }; };
+  { const X = mk('78', 'friend', 'f', ['druzhba']); A.next(X); const s = X.st.friend;
+    eq('Дружба: лист без коду — «Надіслати пораду» вимкнена', [s.step, s.li, ST.friend.canNext(s), ST.friend.nextLabel(s)], ['letter', 0, false, 'Надіслати пораду']);
+    A.act(X, 'code', 'one'); A.act(X, 'tip', 'Підійди й попросися'); A.next(X);
+    eq('Дружба: після поради — екран-реакція з текстом поради', [s.step, friendThanks(X, s, '78')], ['reply', 'Дякую за пораду: «Підійди й попросися»!']);
+    A.act(X, 'tip', ''); eq('Дружба 7–8: порожня порада — «Дякую за пораду!»', friendThanks(X, s, '78'), 'Дякую за пораду!');
+    A.next(X); eq('Дружба: другий лист', [s.step, s.li, s.codes[1]], ['letter', 1, null]); }
+  const f8 = FR('78', ['steps', 'one'], ['Підійди і спитай: "Можна з вами?"', '']);
+  eq('Дружба: коди 3 + 2 → ceilAvg 3; станція завершена', [f8.sc.p1.level, f8.sc.p2.level, f8.L.level, f8.s.done], [3, 2, 3, true]);
+  eq('Дружба: рівень станції за комбінаціями кодів', [['silent', 'bad'], ['bad', 'one'], ['one', 'one'], ['one', 'steps'], ['silent', 'steps'], ['steps', 'steps']].map(c => FR('910', c).L.level), [1, 2, 2, 3, 2, 3]);
+  eq('Дружба: доказ у звіт — порада дитини або опис коду', [f8.sc.p1.ev, f8.sc.p2.ev], ['Поради{в|ла} Поні: «Підійди і спитай: "Можна з вами?"»', 'Порада для Квачі: ' + CONFIG.codes.friendAdvice.items[2].rep]);
+  eq('Дружба: «Усі відповіді» — F1 код 3 «…» | F2 код 2', ST.friend.codes(f8.s).join(' | '), 'F1 код 3 «Підійди і спитай: "Можна з вами?"» | F2 код 2');
+  const f9 = FR('910', ['steps', 'one'], ['Сказати Максу, що йому прикро, і гратися втрьох', 'Поговорити з Максом']);
+  eq('Дружба 9–10: «Усі відповіді»', ST.friend.codes(f9.s).join(' | '), 'F1 код 3 «Сказати Максу, що йому прикро, і гратися втрьох» | F2 код 2 «Поговорити з Максом»');
+  { const X = f9.X, s = f9.s; s.step = 'reply'; s.li = 1; const p = friendThanks(X, s, '910'); s.tips[1] = ''; eq('Дружба 9–10: відповідь редакції — порада або «надруковано ✨»', [p, friendThanks(X, s, '910')], ['Поговорити з Максом', CONFIG.content.friend['910'].printed]); s.tips[1] = 'Поговорити з Максом'; }
+  const fs1 = FR('78', [null, 'steps'], null, 0), fs2 = FR('910', ['bad'], null, 1);
+  eq('Дружба: пропуск одного листа — рівень за іншим', [fs1.sc.p1, fs1.L.level, fs1.s.done, fs2.sc.p2, fs2.L.level, fs2.s.done], [null, 3, true, null, 1, true]);
+  eq('Дружба: пропущений лист — «F пропущено»', [ST.friend.codes(fs1.s)[0], ST.friend.codes(fs2.s)[1]], ['F1 пропущено', 'F2 пропущено']);
+  eq('Дружба: «Порада коротко» — лапки й апострофи зберігаються, до 60 символів, один рядок', [cleanTip('  Скажи: «Привіт!» і "Можна з вами?" — м’ячик\nтеж '), cleanTip('я'.repeat(80)).length], ['Скажи: «Привіт!» і "Можна з вами?" — м’ячик теж ', 60]);
+  { const f = FR('78', ['steps', 'one'], [`Скажи <b>"Привіт"</b> & 'грайся'`, '']); const r = sheetRecord(f.X), c = h => r.row[r.headers.indexOf(h)];
+    eq('Дружба: лапки, апострофи й <> у пораді — у таблиці як є', [c('Дружба — результат'), /F1 код 3 «Скажи <b>"Привіт"<\/b> & 'грайся'» \| F2 код 2/.test(c('Усі відповіді'))], [`🟢 Сильна · 🟢 Знайомство (лист Поні): «Скажи <b>"Привіт"</b> & 'грайся'»; 🟡 Підтримка друга (лист Квачі): одна конструктивна дія`, true]); }
   // Рядок таблиці
   const SR = mk('78', 'emotions', 'f', ['napoleglyvist', 'groshi', 'superechky']); SR.st.emotions = e1.S.st.emotions; SR.st.safe = sf; SR.st.money = m8; SR.st.playground = { done: true, skipped: true };
   SR.self.emotions = 2; SR.self.safe = 3; SR.t.lessonEnd = SR.t.lessonStart + 27.44 * 60000;
@@ -1057,7 +1069,7 @@ function selfTest(extra) {   // extra(eq, mk, дані) — додаткові �
   eq('Таблиця: маршрут — підсумок + 2 навички окремими рядками', col('Загальний висновок / маршрут').split('\n').length, 3);
   eq('Таблиця: назва PDF «Прізвище Ім’я — дата.pdf»', /^Іваненко Олеся — \d\d\.\d\d\.\d{4}\.pdf$/.test(rec.fileName), true);
   { const R2 = mk('910', 'friend', 'm', ['druzhba']); R2.st.friend = f9.s; const r2 = sheetRecord(R2), c2 = h => r2.row[r2.headers.indexOf(h)];
-    eq('Таблиця: Дружба — результат і коди F', [c2('Дружба — результат'), /F1 код 2 \(питання за темою\) \| F2 питань: 2/.test(c2('Усі відповіді')), c2('Гроші — результат'), c2('Обрані теми')], ['🟢 Сильна · 🟡 Увійти в розмову: питання за темою; 🟢 Розмова-пінг-понг: питань: 2', true, 'На курсі', 'Дружба']); }
+    eq('Таблиця: Дружба — результат і коди F', [c2('Дружба — результат'), c2('Дружба — що робити').split(' | ').length, c2('Гроші — результат'), c2('Обрані теми')], ['🟢 Сильна · 🟢 Знайомство (лист Соломії): «Сказати Максу, що йому прикро, і гратися втрьох»; 🟡 Друг дружить з іншим (лист Остапа): «Поговорити з Максом»', 2, 'На курсі', 'Дружба']); }
   // Рекомендації: лише «Прокидається» і «Росте», пріоритет — обраним темам
   const LV = o => Object.fromEntries(SKILL_KEYS.map(k => [k, { level: o[k] }]));
   const RS = { setup: { name: 'Оля' }, self: {} };

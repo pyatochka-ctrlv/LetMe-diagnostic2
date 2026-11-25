@@ -4,7 +4,9 @@
    items — кількість деталей костюма (0–8) у порядку ITEMS, або масив індексів. pop — індекс деталі з анімацією (клас "pop").
    HeroPixel.renderHead('fox', 4) → SVG-рядок лише з головою (для екрана вибору героя).
    Додатково: expression — вираз обличчя (EXPRESSIONS або 'blank'), blink — моргання, frame — кадр ходьби (0/1/2).
-   HeroPixel.renderSpark({ frame, mic, scale }) → Іскра 12×12 (+ мікрофон). */
+   HeroPixel.renderSpark({ frame, mic, scale }) → Іскра 12×12 (+ мікрофон).
+   HeroPixel.renderProp('bird', { frame, letter, scale }) → пташка-листоноша (frame 1 — крила вгору, letter — конверт у дзьобі);
+   HeroPixel.renderProp('mailbox', { scale }) → поштова скринька. Ті самі правила: сітка символів PAL + автоконтур. */
 (function (root) {
   const SIZES = { a:{ W:32, H:42, HX:8, HY:4 }, b:{ W:24, H:30, HX:4, HY:3 } };
   const PAL = {
@@ -13,7 +15,8 @@
     G:'#4CC46A', g:'#A6E8A0', P:'#9B6BFF', q:'#C8AEFF',
     R:'#FF7EB6', Y:'#FFC93C', y:'#E09E1A', T:'#2EC4B6',
     S:'#EEF1FF', u:'#FFE0F0', Z:'#CDD4F0', N:'#26305C', D:'#3A4372', E:'#FF7A59', e:'#CF5537', V:'#B8C1E6',
-    U:'#6EC6FF', K:'#8B5A2B', J:'#E8B27A', A:'#9AA2BA'
+    U:'#6EC6FF', K:'#8B5A2B', J:'#E8B27A', A:'#9AA2BA',
+    b:'#3D8BFF', O:'#FF9F1C', H:'#FFF8E6'
   };
   // Індекс = номер шару. 7 — навушники, 8 — браслет дружби (обидва стилі)
   const ITEMS = ['Маска', 'Пояс', 'Черевики', 'Щит', 'Плащ', 'Зірка', 'Корона', 'Навушники', 'Браслет дружби'];
@@ -336,5 +339,73 @@
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * s}" height="${H * s}" shape-rendering="crispEdges" role="img" aria-label="Іскра">${rects}</svg>`;
   }
 
-  root.HeroPixel = { render, renderHead, renderSpark, HEADS, ITEMS, SIZES, EXPRESSIONS };
+  // Пропси «Пташиної пошти» (Дружба, 7–8). U — тіло, b — крило й хвіст, w — груди, O — дзьоб і лапки, H/A — конверт, r — скринька.
+  const BIRD = [
+    ['..................',
+     '.........UUUU.....',
+     '........UUUUUU....',
+     '.......UUUkwUUOO..',
+     '.......UUUkkUUOOO.',
+     '..bb...UUUUUUU....',
+     '.bbbbUUUbbbUUU....',
+     'bbbbbUUbbbbwwU....',
+     '.bbbbUUUbbwwwU....',
+     '...bbUUUUwwwU.....',
+     '......UUUUUU......',
+     '.......O..O.......',
+     '......OO.OO.......'],
+    ['...bb.............',
+     '...bbb...UUUU.....',
+     '....bbb.UUUUUU....',
+     '.....bbUUUkwUUOO..',
+     '......bUUUkkUUOOO.',
+     '..bb...bUUUUUU....',
+     '.bbbbUUUUUUUUU....',
+     'bbbbbUUUUUUwwU....',
+     '.bbbbUUUUUwwwU....',
+     '...bbUUUUwwwU.....',
+     '......UUUUUU......',
+     '......OO..OO......',
+     '..................']
+  ];
+  const ENVELOPE = ['AHHHHA', 'HAHHAH', 'HHAAHH', 'HHHHHH'];
+  const MAILBOX = [
+    '..rrrrrrrr...',
+    '.rrrrrrrrrr..',
+    'rrrrrrrrrrrrY',
+    'rrkkkkkkkkrrY',
+    'rrrrrrrrrrrrY',
+    'rrrrrrrrrrrrY',
+    'rrrrrHHrrrrr.',
+    'rrrrHHHHrrrr.',
+    'rrrrrrrrrrrr.',
+    'rrrrrrrrrrrr.',
+    '....KKKK.....',
+    '....KJKK.....',
+    '....KKKK.....',
+    '....KJKK.....',
+    '....KKKK.....',
+    '..KKKKKKKK...'];
+  function renderProp(name, o = {}) {
+    const s = o.scale || 4;
+    let rows = name === 'mailbox' ? MAILBOX : BIRD[o.frame ? 1 : 0];
+    if (name === 'bird' && o.letter) {   // конверт у дзьобі: праворуч від дзьоба
+      rows = rows.map(r => r + '......');
+      rows = rows.map((r, j) => { if (j < 3 || j > 6) return r; const a = [...r]; [...ENVELOPE[j - 3]].forEach((ch, i) => { a[17 + i] = ch; }); return a.join(''); });
+    }
+    const W = rows[0].length + 2, H = rows.length + 2;
+    const g = Array.from({ length: H }, () => Array(W).fill(null));
+    rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch !== '.') g[j + 1][i + 1] = ch; }));
+    const out = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (g[y][x]) continue;
+      if ([[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => (g[y + dy] || [])[x + dx])) out.push([x, y]);
+    }
+    out.forEach(([x, y]) => { g[y][x] = 'o'; });
+    let rects = '';
+    for (let y = 0; y < H; y++) { let x = 0; while (x < W) { const ch = g[y][x]; if (!ch) { x++; continue; } let n = 1; while (x + n < W && g[y][x + n] === ch) n++; rects += `<rect x="${x}" y="${y}" width="${n}" height="1" fill="${PAL[ch]}"/>`; x += n; } }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * s}" height="${H * s}" shape-rendering="crispEdges" role="img" aria-label="${name === 'mailbox' ? 'Поштова скринька' : 'Пташка-листоноша'}">${rects}</svg>`;
+  }
+
+  root.HeroPixel = { render, renderHead, renderSpark, renderProp, HEADS, ITEMS, SIZES, EXPRESSIONS };
 })(typeof window !== 'undefined' ? window : globalThis);

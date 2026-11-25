@@ -70,12 +70,12 @@ const STEPS = {
   bob: { '78': ['intro', 'talk', 'trade', 'bye'], '910': ['intro', 'talk', 'trade', 'haggle', 'bye'] },
   playground: { '78': ['intro', 'rules', 'judge'], '910': ['intro', 'compromise', 'chat', 'why'] },
   radio: { '78': ['intro', 'guest', 'q', 'ask'], '910': ['intro', 'guest', 'q', 'ask', 'opinion'] },
-  friend: { '78': ['intro', 'join', 'no'], '910': ['intro', 'enter', 'pingReady', 'ping'] },
+  friend: ['intro', 'letter', 'reply'],
   final: ['batteries', 'crown']
 };
 const CODES = { emotions: () => ['calm'], bob: g => (g === '910' ? ['bobTalk', 'bobHaggle'] : ['bobTalk']), playground: g => (g === '78' ? ['judge'] : ['chatWhy']),
   radio: g => (g === '910' ? ['radioAnswer', 'radioAsk', 'radioOpinion'] : ['radioAnswer', 'radioAsk']),
-  friend: g => (g === '78' ? ['friendJoin', 'friendNo'] : ['friendEnter', 'friendPing']) };
+  friend: () => [] };   // коди Дружби — з еталонами для кожного листа (contentBlock)
 function codesTable(key) {
   const c = CONFIG.codes[key];
   return `<h3>Коди: ${E(c.title)}</h3><table><tr><th style="width:34%">Кнопка на пульті</th><th>Приклади відповідей</th></tr>${c.note ? `<p class="note">${E(c.note)}</p>` : ''}${c.items.map(i => `<tr><td><b>${E(i.label)}</b>${i.v ? ` <span class="note">· рівень ${i.v}</span>` : ''}</td><td>${(i.ex || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`;
@@ -103,10 +103,14 @@ function contentBlock(key) {
     <p class="note">Предмет костюма Боб дарує за будь-якого результату — це наступний предмет за порядком проходження (у сценарії — [предмет]).</p>
     <h3>Що сказати після кожної репліки Боба</h3><table><tr><th style="width:38%">Боб каже на екрані</th><th>Скажи дитині</th></tr>${Object.entries(CONFIG.script.bob.react).filter(([k]) => C.lines[k] || k === 'wish').map(([k, t]) => { const line = k === 'wish' ? C.wish.text : C.lines[k]; return `<tr><td>«${E(line)}»</td><td>${E(fill(t, { line: '…' }))}</td></tr>`; }).join('')}</table>`;
   if (key === 'friend') {
-    const heads = C.heads.slice(0, 3).map(h => ((CONFIG.heroes.find(x => x.id === h) || {}).name || h).toLowerCase()).join(', ');
-    if (G === '78') return `<p class="note"><b>Персонажі:</b> однолітки на перерві (${E(heads)}; голову, яку обрала дитина, гра пропускає), фон — шкільне подвір’я. <b>Проба 1 «Як приєднатися»:</b> діти грають у м’яча, герой стоїть збоку. Один код — найсильніший із того, що прозвучало; рівень = значення коду. <b>Проба 2 «Якщо сказали “ні”»:</b> однолітка на екрані каже «${E(C.no)}». Варіантів відповідей дитині НЕ показуємо — вона відповідає своїми словами. Можна відмітити кілька кодів; рівень — максимальний із відмічених (лише коди зі значенням 1 → рівень 1).</p>`;
-    return `<p class="note"><b>Персонажі:</b> троє однокласників (${E(heads)}; голову, яку обрала дитина, гра пропускає), фон — шкільне подвір’я. <b>Проба 1 «Увійти в розмову»:</b> на екрані бульбашки розмови: ${C.talk.map(t => `«${E(t)}»`).join(' — ')}. Один код; рівень = значення коду. <b>Проба 2 «Розмова-пінг-понг» (${CONFIG.thresholds.friend.pingSec} с):</b> ти говориш від імені однокласника (на екрані — він із бульбашкою «${E(C.peer.line)}»). Таймер бачиш лише ти. На кожне зустрічне питання дитини тисни «+1» (пробіл) — у грі вилітає ✨. Рівень: 2+ питання — 3; 1 питання або лише «ділиться своїм» — 2; 0 — 1.</p>
-      <h3>Шпаргалка: відповіді однокласника (коротко, 1–2 речення, потім пауза)</h3><p><b>«${E(C.peer.line)}»</b></p><ul>${C.peer.answers.map(x => `<li><b>${E(x.about)}:</b> ${E(x.a)}</li>`).join('')}</ul><p class="note">Завершити: ${E(C.peer.close)}</p>`;
+    const ca = CONFIG.codes.friendAdvice;
+    const intro = G === '78'
+      ? `<p class="note"><b>Пташина пошта.</b> Сцена: поштова скринька на острові й пташка-листоноша. Кожен лист — великий малюнок-ситуація (звірята з виразом обличчя) і короткий текст; ти читаєш лист уголос. Після «Надіслати пораду» пташка відносить конверт, звірятко радіє, над ним ✨, а «Порада коротко» з’являється в бульбашці («${E(fill(C.thanksTip, { tip: '…' }))}» або «${E(C.thanks)}»).</p>`
+      : `<p class="note"><b>Дружня газета острова.</b> Сцена: редакція, на столі газета з рубрикою «${E(C.rubric)}». Лист — газетна вирізка з підписом; дитина читає сама, якщо важко — читаєш ти. Після «Надіслати пораду» під листом з’являється колонка «${E(C.answerTitle)}» з «Порадою коротко» (або «${E(C.printed)}») і підписом «— ${E(fill(C.sign, { name: '[ім’я дитини]' }))}».</p>`;
+    const rules = `<p class="note">Два листи = дві проби. На кожен лист — <b>один код</b> (рівень = значення коду); рівень станції — середнє двох листів з округленням угору. <b>«Порада коротко»</b> — необов’язково, до ${CONFIG.thresholds.friend.tipMax} символів: суть поради словами дитини, її побачить дитина. Реакція в грі однаково тепла за будь-якого коду — дитина не має відчути, що порада «погана». Дитина радить не про себе, а персонажу, — так знімається сором.</p>`;
+    const letters = C.letters.map((Lt, i) => `<h3>${i + 1}. ${E(Lt.title)}</h3><p class="note">«${E(Lt.text)}» — ${E(Lt.from)}</p>
+      <table><tr><th style="width:38%">Код на пульті</th><th>Еталони для цього листа</th></tr>${ca.items.map(it => `<tr><td><b>${E(it.label)}</b> <span class="note">· рівень ${it.v}</span><br><span class="note">${E(it.desc)}</span></td><td>${(Lt.ex[it.id] || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`).join('');
+    return intro + rules + letters;
   }
   if (key === 'final') return `<p class="note">Батарейки — по черзі лише для навичок, які оцінено (пропущені станції пропускаються). На екрані — повне питання й маленька картинка станції.</p><ul>${CONFIG.skills.map(s => `<li>${E(s.selfQ)}</li>`).join('')}</ul>`;
   return '';
@@ -117,6 +121,7 @@ function itemsOf(key, st) {
   if (key === 'money' && st === 'exact') return C.targets.map((t, i) => ({ label: `Покупка ${i + 1}: ${t.e} ${t.name} — ${t.sum} монет`, v: { say: t.say } }));
   if (key === 'money' && st === 'deal') return C.deals.map((d, i) => ({ label: `Завдання ${i + 1}: ${d.q || d.text}`, v: { say: d.say } }));
   if (key === 'playground' && st === 'chat') return C.chat.messages.map((m, i) => ({ label: `Повідомлення ${i + 1} — ${m.from}: «${m.text}»`, v: { say: m.say } }));
+  if (key === 'friend' && (st === 'letter' || st === 'reply')) return C.letters.map((Lt, i) => ({ label: `${st === 'letter' ? '' : 'Після поради · '}${i + 1}. ${Lt.title}`, v: { say: Lt.say, quiet: Lt.quiet, short: Lt.short, after: Lt.after, to: Lt.to } }));
   if (key === 'radio' && st === 'q') return C.questions.map((q, i) => ({ label: `Питання ${i + 1}`, v: { say: fill(q.say, { guest: gq }), quiet: q.quiet, wrap: q.wrap } }));
   return null;
 }
@@ -128,17 +133,18 @@ function vars(key, st) {
   if (key === 'playground' && G === '78') v.text = C.judge.about;
   return v;
 }
-const F = [['check', 'Що перевіряємо'], ['expect', 'Чого очікувати'], ['do', 'Що робиш ти'], ['quiet', 'Якщо дитина мовчить або думає довго'], ['active', 'Якщо дуже активна й говорить довго'], ['dont', 'Не кажи / не роби']];
+const F = [['check', 'Що перевіряємо'], ['expect', 'Чого очікувати'], ['do', 'Що робиш ти'], ['quiet', 'Якщо дитина мовчить або думає довго'], ['short', 'Якщо коротка відповідь'], ['active', 'Якщо дуже активна й говорить довго'], ['dont', 'Не кажи / не роби']];
 function stepHTML(x, vv) {
   if (!x) return '';
   const cells = F.filter(([k]) => P(x[k])).map(([k, l]) => `<div class="${k === 'check' ? 'check' : ''}${k === 'dont' ? ' dont' : ''}"><div class="lbl"${k === 'dont' ? ' style="color:var(--red)"' : ''}>${l}</div>${E(fill(P(x[k]), vv))}</div>`).join('');
   return `<div class="step"><div class="lbl">Скажи дитині</div><div class="say">${E(fill(P(x.say), vv))}</div><div class="cols">${cells}</div></div>`;
 }
 function station(key) {
-  const L = CONFIG.locations[key], steps = P(STEPS[key]), sc = CONFIG.script[key], sk = CONFIG.skills.find(s => s.key === key);
+  const L = loc(key, G), steps = P(STEPS[key]), sc = CONFIG.script[key], sk = CONFIG.skills.find(s => s.key === key);
   const stepsHtml = steps.map(st => {
     // кроки, де фраза своя для кожного кадру / покупки / завдання / повідомлення / питання
     const items = itemsOf(key, st);
+    if (items && key === 'friend') return items.map(it => `<div class="note" style="margin-top:10px"><b>${E(it.label)}</b></div>` + stepHTML(sc[st], Object.assign(vars(key, st), it.v))).join('');
     if (items) return items.map((it, i) => `<div class="note" style="margin-top:10px"><b>${E(it.label)}</b></div>` + (i === 0 ? stepHTML(sc[st], Object.assign(vars(key, st), it.v)) : stepHTML({ say: sc[st].say, quiet: key === 'radio' ? sc[st].quiet : '', active: key === 'radio' ? sc[st].active : '' }, Object.assign(vars(key, st), it.v)))).join('');
     return stepHTML(sc[st], vars(key, st));
   }).join('');
@@ -148,12 +154,12 @@ function station(key) {
   const tp = topicOfStation(key), co = coreOf(key);
   const tag = co ? `<span class="tag core">ядро — проходять усі</span>` : tp ? `<span class="tag topic">тема: ${E(tp.name)}</span>` : '';
   return `<div class="card" id="st-${key}"><div class="st-head"><span class="ic">${L.icon}</span><h2>${E(L.name)}</h2>${tag}<span class="time">${L.minutes} хв</span></div>${probes}${lore}${contentBlock(key)}${stepsHtml}${codes}
-    ${key !== 'hero' && key !== 'final' ? `<div class="step"><div class="say">${E(CONFIG.script.done.say)}</div><div class="note">Після кожної локації: ${E(CONFIG.script.done.do)} Предмети костюма видаються за порядком проходження (перша станція — перший предмет зі списку, друга — другий…), навіть якщо станцію пропущено. Корона — завжди у фіналі.</div></div>` : ''}</div>`;
+    ${key !== 'hero' && key !== 'final' ? `<div class="step"><div class="say">${E(CONFIG.script.done.say)}</div><div class="note">Після кожної локації: ${E(CONFIG.script.done.do)} Предмети костюма видаються за порядком проходження (перша станція — перший предмет зі списку, друга — другий…), навіть якщо станцію пропущено. Дружба завжди дає браслет дружби, корона — завжди у фіналі.</div></div>` : ''}</div>`;
 }
 function render() {
   document.querySelectorAll('#swg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.g === G));
   document.getElementById('cur').textContent = `· ${CONFIG.groups[G].label}`;
-  const Lc = k => CONFIG.locations[k], row = (k, note) => `<tr><td>${Lc(k).icon} ${E(Lc(k).name)}</td><td>${E(note)}</td><td>${Lc(k).minutes} хв</td></tr>`;
+  const Lc = k => loc(k, G), row = (k, note) => `<tr><td>${Lc(k).icon} ${E(Lc(k).name)}</td><td>${E(note)}</td><td>${Lc(k).minutes} хв</td></tr>`;
   const base = planOf(routeOf([])), per = CONFIG.topics.map(t => Lc(t.station).minutes), avg = Math.round(per.reduce((a, b) => a + b, 0) / per.length);
   const timing = row('hero', 'завжди') + CONFIG.core.slice(0, 1).map(c => row(c.station, 'ядро — ' + c.name)).join('')
     + CONFIG.topics.filter(t => !t.last).concat(CONFIG.topics.filter(t => t.last)).map(t => row(t.station, 'тема «' + t.name + '»' + (t.last ? ' — завжди остання перед Походом' : ''))).join('')
@@ -183,7 +189,7 @@ function render() {
     <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Потім — крок «Теми діагностики»: 1–3 теми, які обрали батьки. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
     <li>Натисни «Відкрити вікно гри». Якщо браузер його заблокував — дозволь спливні вікна або відкрий index.html вручну в тому самому браузері.</li>
     <li>Коли на пульті «Вікно гри підключено»: ${E(CONFIG.meetHint)} Щоб у грі був звук, один раз клікни у вікні гри до демонстрації.</li>
-    <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії й «+1 зустрічне питання» у «Першому кроці», Ctrl+Z — «Стерти останнє».</li>
+    <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії, Ctrl+Z — «Стерти останнє».</li>
     <li>Після фіналу звіт для батьків відкривається на пульті: там «Зберегти PDF» і статус надсилання в таблицю.</li></ol></div>
   ${CONFIG.order.map(station).join('')}`;
   if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
