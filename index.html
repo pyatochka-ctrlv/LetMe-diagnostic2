@@ -289,9 +289,9 @@ img.emoji{height:1em;width:1em;margin:0 .04em;vertical-align:-0.12em;display:inl
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
-<script src="config.js"></script>
-<script src="hero-pixel.js"></script>
-<script src="core.js"></script>
+<script src="config.js?v=5.3"></script>
+<script src="hero-pixel.js?v=5.3"></script>
+<script src="core.js?v=5.3"></script>
 <script>
 /* ВІКНО ГРИ: лише відображає стан, який надсилає пульт. Жодних кнопок і текстів для МІКа. */
 const HP = window.HeroPixel, $ = q => document.querySelector(q);
@@ -646,6 +646,7 @@ function render() {
   renderChrome();
   const st = $('#stage');
   let html;
+  try {
   if (!S || S.phase === 'setup') html = splashIdle();
   else {
     const key = S.cur, s = S.st[key];
@@ -656,6 +657,7 @@ function render() {
     else if (s.step === 'done') html = V.done(key);
     else html = V[key](s);
   }
+  } catch (e) { console.error('Острів: помилка рендеру', e); html = splashIdle(); }   // одна помилка не зупиняє синхронізацію
   st.innerHTML = T(html);
   const sh = st.querySelector(':scope > .shead');
   if (sh) { const fl = document.createElement('div'); fl.className = 'sflow'; while (sh.nextSibling) fl.appendChild(sh.nextSibling); st.appendChild(fl); }
@@ -672,7 +674,9 @@ function tick() {
 }
 function onState(ns) {
   if (!ns || ns.v !== 5) return;
-  if (S && ns.rev && S.rev && ns.rev < S.rev) return;
+  // старіший стан тієї самої діагностики — пропускаємо; нова діагностика (інший id) приходить з rev від 1 — приймаємо
+  if (S && ns.id === S.id && ns.rev && S.rev && ns.rev < S.rev) return;
+  if (S && ns.id !== S.id) { lastFx = ns.fx ? ns.fx.n : 0; walkFrom = null; }
   const fxNew = ns.fx && (!lastFx || ns.fx.n !== lastFx);
   if (S && ns.cur !== S.cur && ns.fx && ns.fx.kind === 'walk' && !reduced()) walkFrom = S.cur;
   S = ns;

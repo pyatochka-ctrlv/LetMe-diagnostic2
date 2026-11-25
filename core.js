@@ -895,14 +895,15 @@ const SYNC = {
     try { this.bc = new BroadcastChannel(CONFIG.channel); this.bc.onmessage = e => onMsg(e.data); } catch (e) { this.bc = null; }
     window.addEventListener('storage', e => {
       if (role === 'game' && e.key === CONFIG.storageKey && e.newValue) { try { onMsg({ type: 'state', state: JSON.parse(e.newValue) }); } catch (er) { } }
-      if (role === 'pult' && e.key === CONFIG.storageKey + '-ping') onMsg({ type: 'ping' });
+      if (role === 'pult' && e.key === CONFIG.storageKey + '-ping') onMsg({ type: 'ping', ver: String(e.newValue || '').split('|')[1] });
       if (role === 'pult' && e.key === CONFIG.storageKey + '-hello') onMsg({ type: 'hello' });
     });
   },
   post(msg) { try { if (this.bc) this.bc.postMessage(msg); } catch (e) { } },
   publish(S) { S.rev = (S.rev || 0) + 1; const json = JSON.stringify(S); try { localStorage.setItem(CONFIG.storageKey, json); } catch (e) { } this.post({ type: 'state', state: S }); },
   load() { try { const x = JSON.parse(localStorage.getItem(CONFIG.storageKey)); if (x && x.v === 5) return x; } catch (e) { } return null; },
-  ping() { this.post({ type: 'ping' }); try { localStorage.setItem(CONFIG.storageKey + '-ping', String(Date.now())); } catch (e) { } },
+  // ver — версія файлів вікна гри: пульт попереджає, якщо гра завантажилась зі старого кешу
+  ping() { this.post({ type: 'ping', ver: CONFIG.version }); try { localStorage.setItem(CONFIG.storageKey + '-ping', Date.now() + '|' + CONFIG.version); } catch (e) { } },
   hello() { this.post({ type: 'hello' }); try { localStorage.setItem(CONFIG.storageKey + '-hello', String(Date.now())); } catch (e) { } }
 };
 

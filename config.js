@@ -24,7 +24,7 @@ const QR = {
 
 const CONFIG = {
   app: 'Острів суперсил',
-  version: '5.1',
+  version: '5.3',   // міняй разом із ?v=… у <script src> усіх сторінок — щоб браузер не брав старі файли з кешу
   storageKey: 'ostriv-state-v5',
   channel: 'ostriv-sync',
   // Google Таблиця (див. docs/GOOGLE_SHEETS.md). Порожній endpoint — нічого не надсилається.

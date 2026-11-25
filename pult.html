@@ -183,9 +183,9 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 </header>
 <div class="wrap" id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
-<script src="config.js"></script>
-<script src="hero-pixel.js"></script>
-<script src="core.js"></script>
+<script src="config.js?v=5.3"></script>
+<script src="hero-pixel.js?v=5.3"></script>
+<script src="core.js?v=5.3"></script>
 <script>
 let S = SYNC.load() || freshState();
 if (!Array.isArray(S.setup.topics)) S.setup.topics = [];
@@ -214,14 +214,15 @@ $('#memo').textContent = CONFIG.meetHint + ' Пульт і гра мають б�
 /* ---------- синхронізація ---------- */
 SYNC.init('pult', m => {
   if (!m) return;
-  if (m.type === 'ping') { const was = connected(); ui.lastPing = Date.now(); if (!was) { if (S.phase === 'setup') render(); else renderHeader(); } }
+  if (m.type === 'ping') { const was = connected(), old = ui.gameVer; ui.lastPing = Date.now(); if (m.ver !== undefined) ui.gameVer = m.ver; if (old !== ui.gameVer) renderHeader(); if (!was) { if (S.phase === 'setup') render(); else renderHeader(); } }
   if (m.type === 'hello') { ui.lastPing = Date.now(); SYNC.publish(S); if (S.phase === 'setup') render(); else renderHeader(); }
 });
 
 /* ---------- шапка ---------- */
 function renderHeader() {
   $('#tops').textContent = S.phase !== 'setup' ? 'Теми: ' + chosenNames(S).join(', ') : '';
-  const c = $('#conn'); c.classList.toggle('on', connected()); c.querySelector('span').textContent = connected() ? 'Вікно гри підключено' : 'Вікно гри не знайдено';
+  const stale = connected() && ui.gameVer && ui.gameVer !== CONFIG.version;   // вікно гри завантажило іншу (застарілу) версію файлів
+  const c = $('#conn'); c.classList.toggle('on', connected() && !stale); c.querySelector('span').textContent = stale ? `Вікно гри застаріле (версія ${ui.gameVer}) — онови його: клік у вікні гри й Ctrl+Shift+R` : connected() ? 'Вікно гри підключено' : 'Вікно гри не знайдено';
   $('#menu').innerHTML = g('menu', '⋯', { title: 'Меню' }) + (ui.menu ? `<div class="pop">
     ${g('reset', armLabel('reset', '↺ Нова діагностика'), { cls: ui.arm === 'reset' ? 'arm' : '' })}
     ${g('openGame', '↗ Відкрити вікно гри ще раз')}
@@ -711,7 +712,7 @@ setInterval(() => {
   if (A.tick(S)) { ui.undo = []; commit(); }
   document.querySelectorAll('.timer[data-ends]').forEach(el => { el.textContent = fmtTime(Math.ceil(Math.max(0, (+el.dataset.ends - Date.now()) / 1000))); });
   const t = $('#total'); if (t && S.t.lessonStart) t.textContent = `${Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000)} хв з ≈${planOf(routeOfS(S))}`;
-  const c = $('#conn'); if (c && c.classList.contains('on') !== connected()) { renderHeader(); if (S.phase === 'setup') render(); }
+  const c = $('#conn'), on = connected() && !(ui.gameVer && ui.gameVer !== CONFIG.version); if (c && c.classList.contains('on') !== on) { renderHeader(); if (S.phase === 'setup') render(); }
 }, 250);
 
 render();
