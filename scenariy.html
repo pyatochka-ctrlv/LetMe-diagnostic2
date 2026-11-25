@@ -33,6 +33,8 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .cols>div{background:#F4F6FB;border-radius:8px;padding:6px 9px}.cols .check{grid-column:1/-1;background:#EEF7F1}
 .dont{color:var(--red)}
 .note{font-size:13px;color:var(--muted)}
+.tag{font:700 11px var(--text);text-transform:uppercase;letter-spacing:.05em;border:1.5px solid var(--navy);border-radius:999px;padding:1px 9px;white-space:nowrap}
+.tag.core{background:#EEF7F1}.tag.topic{background:#F3F0FF}
 ul{margin:4px 0;padding-left:20px}
 img.emoji{height:1em;width:1em;margin:0 .05em;vertical-align:-0.12em}
 @media (max-width:720px){.cols{grid-template-columns:1fr}}
@@ -68,13 +70,15 @@ const STEPS = {
   bob: { '78': ['intro', 'talk', 'trade', 'bye'], '910': ['intro', 'talk', 'trade', 'haggle', 'bye'] },
   playground: { '78': ['intro', 'rules', 'judge'], '910': ['intro', 'compromise', 'chat', 'why'] },
   radio: { '78': ['intro', 'guest', 'q', 'ask'], '910': ['intro', 'guest', 'q', 'ask', 'opinion'] },
+  friend: { '78': ['intro', 'join', 'no'], '910': ['intro', 'enter', 'pingReady', 'ping'] },
   final: ['batteries', 'crown']
 };
 const CODES = { emotions: () => ['calm'], bob: g => (g === '910' ? ['bobTalk', 'bobHaggle'] : ['bobTalk']), playground: g => (g === '78' ? ['judge'] : ['chatWhy']),
-  radio: g => (g === '910' ? ['radioAnswer', 'radioAsk', 'radioOpinion'] : ['radioAnswer', 'radioAsk']) };
+  radio: g => (g === '910' ? ['radioAnswer', 'radioAsk', 'radioOpinion'] : ['radioAnswer', 'radioAsk']),
+  friend: g => (g === '78' ? ['friendJoin', 'friendNo'] : ['friendEnter', 'friendPing']) };
 function codesTable(key) {
   const c = CONFIG.codes[key];
-  return `<h3>Коди: ${E(c.title)}</h3><table><tr><th style="width:34%">Кнопка на пульті</th><th>Приклади відповідей</th></tr>${c.items.map(i => `<tr><td><b>${E(i.label)}</b></td><td>${(i.ex || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`;
+  return `<h3>Коди: ${E(c.title)}</h3><table><tr><th style="width:34%">Кнопка на пульті</th><th>Приклади відповідей</th></tr>${c.note ? `<p class="note">${E(c.note)}</p>` : ''}${c.items.map(i => `<tr><td><b>${E(i.label)}</b>${i.v ? ` <span class="note">· рівень ${i.v}</span>` : ''}</td><td>${(i.ex || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`;
 }
 function contentBlock(key) {
   const C = CC(key), Th = CONFIG.thresholds;
@@ -95,8 +99,15 @@ function contentBlock(key) {
   if (key === 'radio') return `<p class="note"><b>Таємний гість:</b> спитай про улюбленого героя з мультика, гри чи книжки й впиши ім’я на пульті (до 30 символів). У грі з’явиться наш силует у плащі й масці з табличкою імені — жодних зображень відомих персонажів. «Без імені» — питає ведуча Іскра.</p><p class="note">Ім’я гостя не відмінюємо: «[гість] питає…», «[гість] уважно слухає».</p>
     <h3>Питання інтерв’ю — шпаргалки</h3><table><tr><th style="width:36%">Питання на екрані</th><th>Якщо мовчить</th><th>Якщо говорить довго</th></tr>${C.questions.map(q => `<tr><td>${E(fill(q.q, { guest: '[гість]' }))}</td><td>${E(q.quiet)}</td><td>${E(q.wrap)}</td></tr>`).join('')}</table>
     <h3>Як відповісти від імені гостя (коли дитина ставить питання)</h3><p><b>${E(fill(C.help.template, { guest: '[гість]' }))}</b></p><ul>${C.help.answers.map(x => `<li><b>${E(x.about)}:</b> ${E(x.a)}</li>`).join('')}</ul><p class="note">Закрити розмову: ${E(fill(C.help.close, { guest: '[гість]' }))}</p>${G === '910' ? `<p class="note">Теми «Думки за 30 секунд»: ${C.topics.map(t => `«${E(t)}»`).join(', ')}.</p>` : ''}`;
-  if (key === 'bob') return `<p class="note">${E(CONFIG.lore.bob || '')} Інвентар дитини: ${C.items.map(i => `${i.e} ${E(i.name)} — ${E(i.note || '')}`).join('; ')}. Після двох «Вимагає» Боб іде; максимум ${C.maxReplies} реплік. Плащ Боб дарує за будь-якого результату.</p>
+  if (key === 'bob') return `<p class="note">${E(CONFIG.lore.bob || '')} Інвентар дитини: ${C.items.map(i => `${i.e} ${E(i.name)} — ${E(i.note || '')}`).join('; ')}. Після двох «Вимагає» Боб іде; максимум ${C.maxReplies} реплік. </p>
+    <p class="note">Предмет костюма Боб дарує за будь-якого результату — це наступний предмет за порядком проходження (у сценарії — [предмет]).</p>
     <h3>Що сказати після кожної репліки Боба</h3><table><tr><th style="width:38%">Боб каже на екрані</th><th>Скажи дитині</th></tr>${Object.entries(CONFIG.script.bob.react).filter(([k]) => C.lines[k] || k === 'wish').map(([k, t]) => { const line = k === 'wish' ? C.wish.text : C.lines[k]; return `<tr><td>«${E(line)}»</td><td>${E(fill(t, { line: '…' }))}</td></tr>`; }).join('')}</table>`;
+  if (key === 'friend') {
+    const heads = C.heads.slice(0, 3).map(h => ((CONFIG.heroes.find(x => x.id === h) || {}).name || h).toLowerCase()).join(', ');
+    if (G === '78') return `<p class="note"><b>Персонажі:</b> однолітки на перерві (${E(heads)}; голову, яку обрала дитина, гра пропускає), фон — шкільне подвір’я. <b>Проба 1 «Як приєднатися»:</b> діти грають у м’яча, герой стоїть збоку. Один код — найсильніший із того, що прозвучало; рівень = значення коду. <b>Проба 2 «Якщо сказали “ні”»:</b> однолітка на екрані каже «${E(C.no)}». Варіантів відповідей дитині НЕ показуємо — вона відповідає своїми словами. Можна відмітити кілька кодів; рівень — максимальний із відмічених (лише коди зі значенням 1 → рівень 1).</p>`;
+    return `<p class="note"><b>Персонажі:</b> троє однокласників (${E(heads)}; голову, яку обрала дитина, гра пропускає), фон — шкільне подвір’я. <b>Проба 1 «Увійти в розмову»:</b> на екрані бульбашки розмови: ${C.talk.map(t => `«${E(t)}»`).join(' — ')}. Один код; рівень = значення коду. <b>Проба 2 «Розмова-пінг-понг» (${CONFIG.thresholds.friend.pingSec} с):</b> ти говориш від імені однокласника (на екрані — він із бульбашкою «${E(C.peer.line)}»). Таймер бачиш лише ти. На кожне зустрічне питання дитини тисни «+1» (пробіл) — у грі вилітає ✨. Рівень: 2+ питання — 3; 1 питання або лише «ділиться своїм» — 2; 0 — 1.</p>
+      <h3>Шпаргалка: відповіді однокласника (коротко, 1–2 речення, потім пауза)</h3><p><b>«${E(C.peer.line)}»</b></p><ul>${C.peer.answers.map(x => `<li><b>${E(x.about)}:</b> ${E(x.a)}</li>`).join('')}</ul><p class="note">Завершити: ${E(C.peer.close)}</p>`;
+  }
   if (key === 'final') return `<p class="note">Батарейки — по черзі лише для навичок, які оцінено (пропущені станції пропускаються). На екрані — повне питання й маленька картинка станції.</p><ul>${CONFIG.skills.map(s => `<li>${E(s.selfQ)}</li>`).join('')}</ul>`;
   return '';
 }
@@ -111,7 +122,7 @@ function itemsOf(key, st) {
 }
 function vars(key, st) {
   const C = CC(key);
-  const v = { title: '[назва]', caption: '[підпис кадру]', question: '[питання]', text: '', item: '[товар]', price: '[ціна]', guest: '[ім’я героя / Іскра]', selfQ: '[питання про навичку]' };
+  const v = { locs: '[3–5 локацій — скільки сьогодні в маршруті]', gift: '[предмет]', title: '[назва]', caption: '[підпис кадру]', question: '[питання]', text: '', item: '[товар]', price: '[ціна]', guest: '[ім’я героя / Іскра]', selfQ: '[питання про навичку]' };
   if (key === 'hike' && G === '78') v.text = C.forecast.text;
   if (key === 'bob') v.text = st === 'haggle' ? C.lines.haggle : C.need.name;
   if (key === 'playground' && G === '78') v.text = C.judge.about;
@@ -133,17 +144,33 @@ function station(key) {
   }).join('');
   const codes = (CODES[key] ? CODES[key](G) : []).map(codesTable).join('');
   const probes = sk ? `<p class="note">Навичка: <b>${E(sk.area)}</b>. Проби: ${probeNames(key, G).filter(p => p !== '—').map(E).join(' · ')}.</p>` : '';
-  const lore = CONFIG.lore[key] ? `<p class="note">Заставка в грі: «${E(CONFIG.lore[key])}»</p>` : '';
-  return `<div class="card"><div class="st-head"><span class="ic">${L.icon}</span><h2>${E(L.name)}</h2><span class="time">${L.minutes} хв</span></div>${probes}${lore}${contentBlock(key)}${stepsHtml}${codes}
-    ${key !== 'hero' && key !== 'final' ? `<div class="step"><div class="say">${E(CONFIG.script.done.say)}</div><div class="note">Після кожної локації: ${E(CONFIG.script.done.do)} Предмет костюма видається завжди, навіть якщо станцію пропущено.</div></div>` : ''}</div>`;
+  const lore = P(CONFIG.lore[key]) ? `<p class="note">Заставка в грі: «${E(P(CONFIG.lore[key]))}»</p>` : '';
+  const tp = topicOfStation(key), co = coreOf(key);
+  const tag = co ? `<span class="tag core">ядро — проходять усі</span>` : tp ? `<span class="tag topic">тема: ${E(tp.name)}</span>` : '';
+  return `<div class="card" id="st-${key}"><div class="st-head"><span class="ic">${L.icon}</span><h2>${E(L.name)}</h2>${tag}<span class="time">${L.minutes} хв</span></div>${probes}${lore}${contentBlock(key)}${stepsHtml}${codes}
+    ${key !== 'hero' && key !== 'final' ? `<div class="step"><div class="say">${E(CONFIG.script.done.say)}</div><div class="note">Після кожної локації: ${E(CONFIG.script.done.do)} Предмети костюма видаються за порядком проходження (перша станція — перший предмет зі списку, друга — другий…), навіть якщо станцію пропущено. Корона — завжди у фіналі.</div></div>` : ''}</div>`;
 }
 function render() {
   document.querySelectorAll('#swg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.g === G));
   document.getElementById('cur').textContent = `· ${CONFIG.groups[G].label}`;
-  const timing = CONFIG.order.map(k => `<tr><td>${CONFIG.locations[k].icon} ${E(CONFIG.locations[k].name)}</td><td>${CONFIG.locations[k].minutes} хв</td></tr>`).join('');
-  const total = CONFIG.order.reduce((a, k) => a + CONFIG.locations[k].minutes, 0);
+  const Lc = k => CONFIG.locations[k], row = (k, note) => `<tr><td>${Lc(k).icon} ${E(Lc(k).name)}</td><td>${E(note)}</td><td>${Lc(k).minutes} хв</td></tr>`;
+  const base = planOf(routeOf([])), per = CONFIG.topics.map(t => Lc(t.station).minutes), avg = Math.round(per.reduce((a, b) => a + b, 0) / per.length);
+  const timing = row('hero', 'завжди') + CONFIG.core.slice(0, 1).map(c => row(c.station, 'ядро — ' + c.name)).join('')
+    + CONFIG.topics.filter(t => !t.last).concat(CONFIG.topics.filter(t => t.last)).map(t => row(t.station, 'тема «' + t.name + '»' + (t.last ? ' — завжди остання перед Походом' : ''))).join('')
+    + CONFIG.core.slice(1).map(c => row(c.station, 'ядро — ' + c.name)).join('') + row('final', 'самооцінка й фінал — завжди');
+  const totals = [1, 2, 3].map(n => `<tr><td><b>Ядро + ${n} ${pl(n, ['тема', 'теми', 'тем'])}</b></td><td></td><td><b>≈${base + n * avg} хв</b></td></tr>`).join('');
+  const topicsRows = CONFIG.topics.map(t => `<tr><td><b>${E(t.name)}</b></td><td>${E(t.desc)}</td><td>${Lc(t.station).icon} ${E(Lc(t.station).name)}</td><td>${E(t.module)}</td></tr>`).join('');
+  const TP = CONFIG.topicPick;
   document.getElementById('out').innerHTML = `
-  <div class="card"><h2>Таймінг</h2><table>${timing}<tr><td><b>Разом</b></td><td><b>${total} хв (план — до ${CONFIG.planMinutes})</b></td></tr></table></div>
+  <div class="card"><h2>Вибір тем із батьками</h2>
+    <p class="note">На пульті — крок «${E(TP.title)}» після даних дитини. Батьки обирають від ${TP.min} до ${TP.max} тем; ${CONFIG.core.map(c => E(c.name.toLowerCase())).join(' та ')} дивимося завжди. Теми з форми запису можна передати посиланням: <code>pult.html?topics=druzhba,vpevnenist</code>.</p>
+    <div class="step"><div class="lbl">Скажи батькам</div><div class="say">${E(TP.say)}</div></div>
+    <div class="cols"><div class="check"><div class="lbl">Як пояснити вибір</div>${E(TP.explain)}</div>
+      <div><div class="lbl">Якщо кажуть «Оберіть усе»</div>${E(TP.all)}</div><div><div class="lbl">Якщо батьки вагаються</div>${E(TP.unsure)}</div></div>
+    <h3>Теми (назви для батьків)</h3><table><tr><th>Тема</th><th>Опис для батьків</th><th>Станція</th><th>Модуль курсу</th></tr>${topicsRows}</table>
+    <p class="note">Порядок станцій: Кіностудія → обрані теми в порядку таблиці → Похід → самооцінка → фінал. Радіо, якщо обране, — завжди останнім перед Походом: дитина вже звикла до МІКа.</p></div>
+  <div class="card"><h2>Таймінг</h2><table><tr><th>Станція</th><th>Коли</th><th>Час</th></tr>${timing}${totals}</table>
+    <p class="note">Ядро (з прибуттям і фіналом) — ${base} хв, кожна тема — ≈${avg} хв. План — до ${CONFIG.planMinutes} хв. Точний план уроку пульт рахує з обраних тем.</p></div>
   <div class="card"><h2>Загальні правила</h2><ul>
     <li>Нейтральні фрази: «Записала», «Дякую, далі», «Прийнято», «Цікаво!».</li>
     <li>Не підказуй і не повторюй відповідь дитини оцінною інтонацією. Не порівнюй з іншими дітьми.</li>
@@ -153,12 +180,13 @@ function render() {
     <li>Тексти на кшталт «мрія(в)(ла)» читай у роді дитини.</li></ul></div>
   <div class="card"><h2>Технічна пам’ятка</h2><ol>
     <li>Відкрий <b>pult.html</b> — це пульт МІКа, дитина його не бачить.</li>
-    <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
+    <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Потім — крок «Теми діагностики»: 1–3 теми, які обрали батьки. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
     <li>Натисни «Відкрити вікно гри». Якщо браузер його заблокував — дозволь спливні вікна або відкрий index.html вручну в тому самому браузері.</li>
     <li>Коли на пульті «Вікно гри підключено»: ${E(CONFIG.meetHint)} Щоб у грі був звук, один раз клікни у вікні гри до демонстрації.</li>
-    <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії, Ctrl+Z — «Стерти останнє».</li>
+    <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії й «+1 зустрічне питання» у «Першому кроці», Ctrl+Z — «Стерти останнє».</li>
     <li>Після фіналу звіт для батьків відкривається на пульті: там «Зберегти PDF» і статус надсилання в таблицю.</li></ol></div>
   ${CONFIG.order.map(station).join('')}`;
+  if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
   emojify(document.body);
 }
 document.addEventListener('click', e => {

@@ -23,7 +23,7 @@ const PDF_HEADER = 'PDF результату';
 const ID_HEADER = 'id';
 const MAX_CELL = 49000; // ліміт клітинки — 50 000 символів
 
-// кольори рівнів (🟢 3 · 🟡 2 · 🔴 1 · ⚪ не оцінено) — фон клітинок «— результат»
+// кольори рівнів (🟢 3 · 🟡 2 · 🔴 1 · ⚪ не оцінено) — фон клітинок «— результат»; «На курсі» (тему не обрано) — без фону
 const LEVEL_BG = { '🟢': '#D6F2E1', '🟡': '#FFF1C2', '🔴': '#FDE2E2', '⚪': '#F1F2F6' };
 
 function doPost(e) {
@@ -97,12 +97,22 @@ function doGet() {
   return json_({ ok: true, info: 'Острів суперсил: приймаю POST із результатами діагностики.' });
 }
 
-// Аркуш і заголовки створюються автоматично; колонка id прихована
+// Аркуш і заголовки створюються автоматично; колонка id прихована.
+// Міграція: якщо в новій версії пульта з’явилися колонки (напр. «Обрані теми», «Дружба — результат»),
+// вони ВСТАВЛЯЮТЬСЯ на своє місце — старі рядки зсуваються разом із заголовками й не плутаються.
 function ensureHeaders_(sheet, headers) {
   const lastCol = Math.max(sheet.getLastColumn(), 1);
-  const current = sheet.getLastRow() ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-  const same = current.length >= headers.length && headers.every((h, i) => String(current[i]) === String(h));
+  const current = sheet.getLastRow() ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String) : [];
+  const same = current.length >= headers.length && headers.every((h, i) => current[i] === String(h));
   if (same) return;
+  if (sheet.getLastRow() > 1 && current.some(Boolean)) {
+    headers.forEach((h, i) => {
+      if (current.indexOf(String(h)) !== -1) return;   // колонка вже є
+      if (i < current.length) sheet.insertColumnBefore(i + 1);
+      current.splice(i, 0, String(h));
+    });
+  }
+  if (sheet.getMaxColumns() < headers.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setWrap(true).setVerticalAlignment('middle');
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(3); // дата, ім’я, прізвище — завжди видно
