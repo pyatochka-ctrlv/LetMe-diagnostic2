@@ -289,9 +289,9 @@ img.emoji{height:1em;width:1em;margin:0 .04em;vertical-align:-0.12em;display:inl
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
-<script src="config.js?v=5.3"></script>
-<script src="hero-pixel.js?v=5.3"></script>
-<script src="core.js?v=5.3"></script>
+<script src="config.js?v=5.4"></script>
+<script src="hero-pixel.js?v=5.4"></script>
+<script src="core.js?v=5.4"></script>
 <script>
 /* ВІКНО ГРИ: лише відображає стан, який надсилає пульт. Жодних кнопок і текстів для МІКа. */
 const HP = window.HeroPixel, $ = q => document.querySelector(q);
@@ -358,9 +358,11 @@ function playFx(f) {
 
 /* ---------- верх, Іскра, герой ---------- */
 // маршрут уроку (лише станції сьогоднішніх тем)
-const route = () => (S && S.phase !== 'setup' ? routeOfS(S) : CONFIG.order);
+// до кінця квізу для батьків маршруту ще немає — гра показує лише заставку
+const preLesson = () => !S || S.phase === 'setup' || S.phase === 'quiz';
+const route = () => (!preLesson() ? routeOfS(S) : CONFIG.order);
 function renderChrome() {
-  $('#prog').innerHTML = S && S.phase !== 'setup' ? route().filter(k => SKILL_KEYS.includes(k)).map(k => { const s = S.st[k]; const L = loc(k, S && S.setup.group);
+  $('#prog').innerHTML = !preLesson() ? route().filter(k => SKILL_KEYS.includes(k)).map(k => { const s = S.st[k]; const L = loc(k, S && S.setup.group);
     return `<div class="dot${s && s.done ? ' done' : ''}${S.cur === k && S.phase === 'lesson' ? ' cur' : ''}">${L.icon}</div>`; }).join('') : '';
   const sp = $('#spark');
   if (!sp.dataset.ok) { sp.innerHTML = HP.renderSpark({ scale: 4 }) + `<div class="f2">${HP.renderSpark({ scale: 4, frame: 1 })}</div>`; sp.dataset.ok = 1; }
@@ -374,7 +376,7 @@ function setBubble(t) {
   if (t !== lastBubble) { b.textContent = t; b.classList.remove('say'); void b.offsetWidth; b.classList.add('say'); lastBubble = t; }
 }
 function iskraLine() {
-  if (!S || S.phase === 'setup') return CONFIG.iskra.idle;
+  if (preLesson()) return CONFIG.iskra.idle;
   const key = S.cur, s = S.st[key]; if (!s) return '';
   if (key === 'hero') return CONFIG.iskra.hero;
   if (key === 'final') return CONFIG.iskra.final[s.step] || '';
@@ -638,7 +640,8 @@ V.final = s => {
     <div class="lead">${esc(S.setup.name)}, ти пройш{ов|ла} увесь острів!</div><div class="kicker" style="font-size:16px">Твоя найяскравіша суперсила</div><div class="huge">${esc(sk.title)}</div></div></div>`;
 };
 function splashIdle() {
-  return `<div class="center"><div style="font-size:120px;line-height:1">🏝️</div><div class="huge">Острів суперсил</div><div class="lead muted">Скоро вирушаємо!</div></div>`;
+  const sub = S && S.phase === 'quiz' ? CONFIG.parentQuiz.gameSplash : 'Скоро вирушаємо!';   // під час квізу — нейтральна заставка, без питань і тем
+  return `<div class="center"><div style="font-size:120px;line-height:1">🏝️</div><div class="huge">Острів суперсил</div><div class="lead muted">${esc(sub)}</div></div>`;
 }
 
 /* ---------- рендер ---------- */
@@ -647,7 +650,7 @@ function render() {
   const st = $('#stage');
   let html;
   try {
-  if (!S || S.phase === 'setup') html = splashIdle();
+  if (preLesson()) html = splashIdle();
   else {
     const key = S.cur, s = S.st[key];
     if (!s) html = splashIdle();

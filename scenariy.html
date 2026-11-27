@@ -52,8 +52,8 @@ img.emoji{height:1em;width:1em;margin:0 .05em;vertical-align:-0.12em}
 </div>
 <div class="wrap" id="out"></div>
 <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
-<script src="config.js?v=5.3"></script>
-<script src="core.js?v=5.3"></script>
+<script src="config.js?v=5.4"></script>
+<script src="core.js?v=5.4"></script>
 <script>
 /* Статичний сценарій: усі тексти беруться з config.js, тож не розходяться з пультом і грою. */
 let G = '78';
@@ -105,9 +105,9 @@ function contentBlock(key) {
   if (key === 'friend') {
     const ca = CONFIG.codes.friendAdvice;
     const intro = G === '78'
-      ? `<p class="note"><b>Пташина пошта.</b> Сцена: поштова скринька на острові й пташка-листоноша. Кожен лист — великий малюнок-ситуація (звірята з виразом обличчя) і короткий текст; ти читаєш лист уголос. Після «Надіслати пораду» пташка відносить конверт, звірятко радіє, над ним ✨, а «Порада коротко» з’являється в бульбашці («${E(fill(C.thanksTip, { tip: '…' }))}» або «${E(C.thanks)}»).</p>`
-      : `<p class="note"><b>Дружня газета острова.</b> Сцена: редакція, на столі газета з рубрикою «${E(C.rubric)}». Лист — газетна вирізка з підписом; дитина читає сама, якщо важко — читаєш ти. Після «Надіслати пораду» під листом з’являється колонка «${E(C.answerTitle)}» з «Порадою коротко» (або «${E(C.printed)}») і підписом «— ${E(fill(C.sign, { name: '[ім’я дитини]' }))}».</p>`;
-    const rules = `<p class="note">Два листи = дві проби. На кожен лист — <b>один код</b> (рівень = значення коду); рівень станції — середнє двох листів з округленням угору. <b>«Порада коротко»</b> — необов’язково, до ${CONFIG.thresholds.friend.tipMax} символів: суть поради словами дитини, її побачить дитина. Реакція в грі однаково тепла за будь-якого коду — дитина не має відчути, що порада «погана». Дитина радить не про себе, а персонажу, — так знімається сором.</p>`;
+      ? `<p class="note"><b>Пташина пошта.</b> Сцена: поштова скринька на острові й пташка-листоноша. Кожен лист — великий малюнок-ситуація (звірята з виразом обличчя) і короткий текст; ти читаєш лист уголос. Після «Надіслати пораду» пташка відносить конверт, звірятко радіє, над ним ✨, у бульбашці — «${E(C.thanks)}».</p>`
+      : `<p class="note"><b>Дружня газета острова.</b> Сцена: редакція, на столі газета з рубрикою «${E(C.rubric)}». Лист — газетна вирізка з підписом; дитина читає сама, якщо важко — читаєш ти. Після «Надіслати пораду» під листом з’являється колонка «${E(C.answerTitle)}» — «${E(C.printed)}» і підпис «— ${E(fill(C.sign, { name: '[ім’я дитини]' }))}».</p>`;
+    const rules = `<p class="note">Два листи = дві проби. На кожен лист — <b>один код</b> (рівень = значення коду); рівень станції — середнє двох листів з округленням угору. Реакція в грі однаково тепла за будь-якого коду — дитина не має відчути, що порада «погана». Дитина радить не про себе, а персонажу, — так знімається сором.</p>`;
     const letters = C.letters.map((Lt, i) => `<h3>${i + 1}. ${E(Lt.title)}</h3><p class="note">«${E(Lt.text)}» — ${E(Lt.from)}</p>
       <table><tr><th style="width:38%">Код на пульті</th><th>Еталони для цього листа</th></tr>${ca.items.map(it => `<tr><td><b>${E(it.label)}</b> <span class="note">· рівень ${it.v}</span><br><span class="note">${E(it.desc)}</span></td><td>${(Lt.ex[it.id] || []).map(E).join('<br>')}</td></tr>`).join('')}</table>`).join('');
     return intro + rules + letters;
@@ -166,13 +166,19 @@ function render() {
     + CONFIG.core.slice(1).map(c => row(c.station, 'ядро — ' + c.name)).join('') + row('final', 'самооцінка й фінал — завжди');
   const totals = [1, 2, 3].map(n => `<tr><td><b>Ядро + ${n} ${pl(n, ['тема', 'теми', 'тем'])}</b></td><td></td><td><b>≈${base + n * avg} хв</b></td></tr>`).join('');
   const topicsRows = CONFIG.topics.map(t => `<tr><td><b>${E(t.name)}</b></td><td>${E(t.desc)}</td><td>${Lc(t.station).icon} ${E(Lc(t.station).name)}</td><td>${E(t.module)}</td></tr>`).join('');
-  const TP = CONFIG.topicPick;
+  const TP = CONFIG.topicPick, PQ = CONFIG.parentQuiz;
   document.getElementById('out').innerHTML = `
-  <div class="card"><h2>Вибір тем із батьками</h2>
-    <p class="note">На пульті — крок «${E(TP.title)}» після даних дитини. Батьки обирають від ${TP.min} до ${TP.max} тем; ${CONFIG.core.map(c => E(c.name.toLowerCase())).join(' та ')} дивимося завжди. Теми з форми запису можна передати посиланням: <code>pult.html?topics=druzhba,vpevnenist</code>.</p>
-    <div class="step"><div class="lbl">Скажи батькам</div><div class="say">${E(TP.say)}</div></div>
-    <div class="cols"><div class="check"><div class="lbl">Як пояснити вибір</div>${E(TP.explain)}</div>
-      <div><div class="lbl">Якщо кажуть «Оберіть усе»</div>${E(TP.all)}</div><div><div class="lbl">Якщо батьки вагаються</div>${E(TP.unsure)}</div></div>
+  <div class="card" id="parents"><h2>Знайомство з батьками</h2>
+    <p class="note">Окремий крок після налаштувань і перед вибором героя, ≈1,5 хв. Квіз — <b>лише на пульті</b>: ти читаєш питання й варіанти вголос і клікаєш відповідь батьків. У вікні гри в цей час — заставка острова «${E(PQ.gameSplash)}», жодних питань, варіантів чи тем. ${CONFIG.core.map((c, i) => E(i ? c.name.toLowerCase() : c.name)).join(' та ')} дивимося завжди.</p>
+    <div class="step"><div class="lbl">Скажи батькам</div><div class="say">${E(PQ.say)}</div></div>
+    ${PQ.questions.map((q, i) => `<h3>Питання ${i + 1} з ${PQ.questions.length}: ${E(q.q)}${q.max > 1 ? ` <span class="note">(${E(q.hint)})</span>` : ''}</h3><table><tr><th style="width:42%">Варіант (прочитай уголос)</th><th>Бали темам</th></tr>${q.options.map(o => `<tr><td><b>${E(o.label)}</b></td><td class="note">${Object.entries(o.pts).map(([k, v]) => `${E(topicByKey(k).name)} +${v}`).join(', ')}</td></tr>`).join('')}</table>`).join('')}
+    <p class="note"><b>Результат:</b> пропонуються теми з ≥${PQ.threshold} балами (максимум ${PQ.max}); при рівності — порядок ${PQ.priority.map(k => E(topicByKey(k).name)).join(', ')}. Якщо жодна тема не набрала ${PQ.threshold} — беремо першу за цим порядком із ненульовими балами. Пульт показує екран «${E(PQ.summaryTitle)}» з темами й описами.</p>
+    <div class="step"><div class="lbl">Скажи батькам (екран «${E(PQ.summaryTitle)}»)</div><div class="say">${E(fill(PQ.sayResult, { focus: '[теми — напр., дружбі й упевненості]', name: '[ім’я дитини]' }))}</div>
+      <div class="note">Хочуть замінити тему — «Змінити теми»: 6 карток, від ${TP.min} до ${TP.max}, під ними час уроку. Зміну пульт позначить у таблиці «${E(PQ.sheetChanged)}».</div></div>
+    <div class="step"><div class="lbl">Після «Підходить — до гри»</div><div class="say">${E(fill(PQ.sayGo, { name: '[ім’я дитини]' }))}</div></div>
+    <div class="cols"><div class="check"><div class="lbl">Навіщо квіз</div>${E(TP.explain)}</div>
+      <div><div class="lbl">Якщо питають «Можна все?»</div>${E(PQ.all)}</div><div><div class="lbl">Якщо батьків немає поруч</div>${E(PQ.absent)}</div></div>
+    <p class="note">Посилання з <code>?topics=…</code> (теми з форми запису) пропускає питання й одразу відкриває «${E(PQ.summaryTitle)}» з цими темами — їх так само можна змінити. Якщо квіз пропущено, у звіті немає розділу «${E(PQ.report.title)}».</p>
     <h3>Теми (назви для батьків)</h3><table><tr><th>Тема</th><th>Опис для батьків</th><th>Станція</th><th>Модуль курсу</th></tr>${topicsRows}</table>
     <p class="note">Порядок станцій: Кіностудія → обрані теми в порядку таблиці → Похід → самооцінка → фінал. Радіо, якщо обране, — завжди останнім перед Походом: дитина вже звикла до МІКа.</p></div>
   <div class="card"><h2>Таймінг</h2><table><tr><th>Станція</th><th>Коли</th><th>Час</th></tr>${timing}${totals}</table>
@@ -186,7 +192,7 @@ function render() {
     <li>Тексти на кшталт «мрія(в)(ла)» читай у роді дитини.</li></ul></div>
   <div class="card"><h2>Технічна пам’ятка</h2><ol>
     <li>Відкрий <b>pult.html</b> — це пульт МІКа, дитина його не бачить.</li>
-    <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Потім — крок «Теми діагностики»: 1–3 теми, які обрали батьки. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
+    <li>Заповни налаштування: ім’я та прізвище дитини (обидва обов’язкові, прізвище потрібне для пошуку в таблиці), МІК, групу, вік і стать. Потім — «Знайомство з батьками»: короткий квіз, після якого пульт пропонує 1–3 теми. Картка «Як це працює» пояснює, що на пульті, а що в грі.</li>
     <li>Натисни «Відкрити вікно гри». Якщо браузер його заблокував — дозволь спливні вікна або відкрий index.html вручну в тому самому браузері.</li>
     <li>Коли на пульті «Вікно гри підключено»: ${E(CONFIG.meetHint)} Щоб у грі був звук, один раз клікни у вікні гри до демонстрації.</li>
     <li>Гарячі клавіші пульта: Enter — «Далі», пробіл — «+1 спосіб» у Кіностудії, Ctrl+Z — «Стерти останнє».</li>

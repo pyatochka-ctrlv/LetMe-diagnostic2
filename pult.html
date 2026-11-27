@@ -89,6 +89,15 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 .tcard .tt{display:flex;flex-direction:column;gap:2px}.tcard .tt b{font-size:15px}.tcard .tt span{font-size:13.5px}
 .tcard .tmeta{color:var(--muted);font-size:12px !important}
 .tsum{margin-top:10px;font-weight:800;font-size:16px}
+/* квіз для батьків */
+.qhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.qhead h2{font:700 18px var(--head);margin:0}
+.qcount{font:800 14px var(--text);background:var(--yellow);border:1.5px solid var(--navy);border-radius:999px;padding:2px 12px;white-space:nowrap}
+.qq{font:800 26px/1.3 var(--head);margin:16px 0 4px}
+.qopts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.qopt{font-size:19px;padding:12px 16px}
+.qnav{display:flex;gap:10px;align-items:center;margin-top:16px}
+.tsel{margin:8px 0 4px;padding-left:20px;font-size:17px}.tsel li{margin-bottom:4px}
 .tcore{margin-top:8px;font-size:13px;color:var(--muted)}
 .noti{background:#FFF6DA;border:1px solid #F1D27A;border-radius:10px;padding:10px 12px;font-size:14px}
 /* ---------- звіт: веб-сторінка зі скролом ---------- */
@@ -183,17 +192,16 @@ img.emoji{height:1.1em;width:1.1em;margin:0 .05em;vertical-align:-0.18em}
 </header>
 <div class="wrap" id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
-<script src="config.js?v=5.3"></script>
-<script src="hero-pixel.js?v=5.3"></script>
-<script src="core.js?v=5.3"></script>
+<script src="config.js?v=5.4"></script>
+<script src="hero-pixel.js?v=5.4"></script>
+<script src="core.js?v=5.4"></script>
 <script>
 let S = SYNC.load() || freshState();
 if (!Array.isArray(S.setup.topics)) S.setup.topics = [];
 const ui = { lastPing: 0, arm: null, armT: null, menu: false, ex: {}, view: null, lastT: 0, blocked: false, undo: [], topicWarn: false, twT: null };
 // pult.html?topics=druzhba,vpevnenist — теми з форми запису одразу відмічені (лише на екрані налаштувань)
 const URL_TOPICS = parseTopicsParam(location.search);
-function applyUrlTopics() { if (URL_TOPICS && S.phase === 'setup') S.setup.topics = URL_TOPICS.slice(); }
-applyUrlTopics();
+// з ?topics= квіз для батьків пропускається: одразу екран «Сьогодні ми подивимося» з цими темами (A.quiz)
 const $ = q => document.querySelector(q);
 const T = s => tplG(s, S.setup.gender);
 const ctx = () => ctxOf(S, S.cur);
@@ -208,7 +216,6 @@ const armLabel = (key, label) => (ui.arm === key ? 'Точно? Натисни �
 function commit() { SYNC.publish(S); render(); }
 const connected = () => Date.now() - ui.lastPing < 2600;
 const childOk = () => { const s = S.setup; return !!(s.name.trim() && s.surname.trim() && s.group && s.age && s.gender); };
-const setupOk = () => childOk() && topicsOk(S.setup);
 $('#memo').textContent = CONFIG.meetHint + ' Пульт і гра мають бути відкриті в одному браузері на одному комп’ютері.';
 
 /* ---------- синхронізація ---------- */
@@ -220,7 +227,7 @@ SYNC.init('pult', m => {
 
 /* ---------- шапка ---------- */
 function renderHeader() {
-  $('#tops').textContent = S.phase !== 'setup' ? 'Теми: ' + chosenNames(S).join(', ') : '';
+  $('#tops').textContent = S.phase === 'lesson' || S.phase === 'report' ? 'Теми: ' + chosenNames(S).join(', ') : '';
   const stale = connected() && ui.gameVer && ui.gameVer !== CONFIG.version;   // вікно гри завантажило іншу (застарілу) версію файлів
   const c = $('#conn'); c.classList.toggle('on', connected() && !stale); c.querySelector('span').textContent = stale ? `Вікно гри застаріле (версія ${ui.gameVer}) — онови його: клік у вікні гри й Ctrl+Shift+R` : connected() ? 'Вікно гри підключено' : 'Вікно гри не знайдено';
   $('#menu').innerHTML = g('menu', '⋯', { title: 'Меню' }) + (ui.menu ? `<div class="pop">
@@ -243,28 +250,48 @@ function viewSetup() {
       <div class="frow"><span class="l">Вік <span class="req">*</span></span><div class="chips">${s.group ? CONFIG.groups[s.group].ages.map(a => chip('age', a, a)).join('') : '<span class="hint">спершу оберіть групу</span>'}</div></div>
       <div class="frow"><span class="l">Стать <span class="req">*</span></span><div class="chips">${chip('gender', 'm', 'Хлопчик')}${chip('gender', 'f', 'Дівчинка')}</div></div>
       </div></div>
-    ${viewTopics()}
     <div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${g('openGame', '↗ Відкрити вікно гри', { cls: connected() ? '' : 'primary' })}
       <span class="hint">${connected() ? '✓ Вікно гри підключено.' : 'Відкрий вікно гри.'} ${esc(CONFIG.meetHint)}</span></div>
       ${ui.blocked ? `<div class="noti" style="margin-top:10px">Браузер заблокував нове вікно. Дозволь спливні вікна для цієї сторінки або відкрий гру вручну: <a href="index.html" target="ostriv-game">index.html</a> (у тому самому браузері).</div>` : ''}</div>
-    <div style="display:flex;justify-content:flex-end">${g('start', 'Почати урок →', { cls: 'primary big', disabled: !(setupOk() && connected()) })}</div>
-    <div class="hint" style="text-align:right">${!childOk() ? 'Заповни обов’язкові поля (*). ' : ''}${!topicsOk(S.setup) ? esc(CONFIG.topicPick.minHint) + '. ' : ''}${!connected() ? '«Почати» стане активною, коли вікно гри буде підключено.' : ''}</div>
+    <div style="display:flex;justify-content:flex-end">${g('quiz', URL_TOPICS ? 'Далі: теми уроку →' : 'Далі: знайомство з батьками →', { cls: 'primary big', disabled: !(childOk() && connected()) })}</div>
+    <div class="hint" style="text-align:right">${!childOk() ? 'Заповни обов’язкові поля (*). ' : ''}${URL_TOPICS ? `Теми з посилання: ${esc(URL_TOPICS.map(k => topicByKey(k).name).join(', ') || '—')} — квіз для батьків пропускаємо. ` : ''}${!connected() ? '«Далі» стане активною, коли вікно гри буде підключено.' : ''}</div>
   </div>`;
 }
 
-// крок «Теми діагностики»: 6 карток-чекбоксів, від min до max тем, підсумок часу
-function viewTopics() {
+// ручний вибір тем: 6 карток-чекбоксів, від min до max, підсумок часу (екран «Сьогодні ми подивимося» → «Змінити теми»)
+function viewTopicsCards() {
   const tp = CONFIG.topicPick, sel = normTopics(S.setup.topics), n = sel.length;
   const cards = CONFIG.topics.map(t => { const on = sel.includes(t.key), L = loc(t.station, S.setup.group);
     return `<button class="tcard${on ? ' on' : ''}" data-g="topic" data-arg="${t.key}" role="checkbox" aria-checked="${on}"><span class="tbox">${on ? '✓' : ''}</span>
       <span class="tt"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span><span class="tmeta">${L.icon} ${esc(L.name)} · ≈${L.minutes} хв · модуль «${esc(t.module)}»</span></span></button>`; }).join('');
-  const core = CONFIG.core.map(c => `${loc(c.station).icon} ${esc(loc(c.station).name)} (${esc(c.name)})`).join(', ');
-  return `<div class="panel"><h2 style="font:700 18px var(--head);margin:0 0 12px">${esc(tp.title)} <span class="req">*</span></h2>
-    <div class="say small"><div class="lbl">Скажи батькам</div><p>${esc(tp.say)}</p></div>
-    <div class="tgrid">${cards}</div>
+  return `<div class="tgrid">${cards}</div>
     ${ui.topicWarn ? `<div class="noti" style="margin-top:10px">${esc(tp.maxHint)}</div>` : ''}
-    <div class="tsum">Обрано ${n} з ${tp.max} · ${n ? esc(fill(tp.total, { n: planOf(routeOf(sel)) })) : esc(tp.minHint)}</div>
-    <div class="tcore">Проходять усі: ${core}.</div></div>`;
+    <div class="tsum">Обрано ${n} з ${tp.max} · ${n ? esc(fill(tp.total, { n: planOf(routeOf(sel)) })) : esc(tp.minHint)}</div>`;
+}
+// «Знайомство з батьками»: квіз лише на пульті (у грі — заставка), потім «Сьогодні ми подивимося»
+function viewQuiz() {
+  const Q = S.quiz, P = CONFIG.parentQuiz, name = S.setup.name || '', NQ = P.questions.length;
+  const gameNote = `<div class="hint" style="text-align:right">У вікні гри зараз заставка «${esc(P.gameSplash)}» — питань, варіантів і тем дитина не бачить.</div>`;
+  if (Q.step === 'q') {
+    const q = P.questions[Q.qi], a = Q.ans[Q.qi];
+    return `<div class="setup"><div class="panel"><div class="qhead"><h2>${esc(P.title)}</h2><span class="qcount">Питання ${Q.qi + 1} з ${NQ}</span></div>
+      ${Q.qi === 0 ? `<div class="say small"><div class="lbl">Скажи батькам</div><p>${esc(P.say)}</p></div>` : ''}
+      <div class="qq">${esc(q.q)}</div>${q.max > 1 ? `<div class="hint" style="font-size:15px;font-weight:700">${esc(q.hint)}</div>` : ''}
+      <div class="qopts">${q.options.map(o => g('qans', esc(T(o.label)), { arg: o.id, cls: 'qopt' + (a.includes(o.id) ? ' sel' : '') })).join('')}</div>
+      ${ui.qWarn ? `<div class="noti" style="margin-top:10px">${esc(P.maxHint)}</div>` : ''}
+      <div class="qnav">${Q.qi === 0 ? g('qnone', esc(P.noParents), { cls: 'ghost' }) : ''}<span style="flex:1"></span>${g('qback', Q.qi === 0 ? '← До налаштувань' : '← Назад')}${g('qnext', Q.qi < NQ - 1 ? 'Далі →' : 'Готово →', { cls: 'primary big', disabled: !a.length })}</div></div>${gameNote}</div>`;
+  }
+  const sel = normTopics(S.setup.topics);
+  const say = Q.skipped === 'noParents' ? P.sayManual : fill(Q.skipped === 'url' ? P.sayUrl : P.sayResult, { focus: sel.length ? focusList(sel) : '…', name });
+  const list = sel.length ? `<ul class="tsel">${sel.map(k => { const t = topicByKey(k); return `<li><b>${esc(t.name)}</b> — ${esc(t.desc)}</li>`; }).join('')}<li class="hint">${esc(P.coreLine)}</li></ul>` : `<p class="hint">${esc(CONFIG.topicPick.minHint)}.</p>`;
+  return `<div class="setup"><div class="panel"><div class="qhead"><h2>${esc(P.summaryTitle)}</h2><span class="qcount">≈${planOf(routeOf(sel))} хв</span></div>
+    <div class="say small"><div class="lbl">${Q.skipped === 'noParents' ? 'Що робиш ти' : 'Скажи батькам'}</div><p>${esc(T(say))}</p></div>
+    ${list}
+    <div class="qnav">${g('qedit', Q.edit ? 'Сховати вибір тем' : 'Змінити теми')}${quizChanged(S) ? '<span class="hint">теми змінено — у таблиці буде позначка</span>' : ''}</div>
+    ${Q.edit ? `<div style="margin-top:10px">${viewTopicsCards()}</div>` : ''}
+    <div class="say small" style="margin-top:14px"><div class="lbl">Після підтвердження скажи</div><p>${esc(T(fill(P.sayGo, { name })))}</p></div>
+    <div class="qnav">${g('qback', '← До питань')}<span style="flex:1"></span>${g('qgo', 'Підходить — до гри →', { cls: 'primary big', disabled: !(topicsOk(S.setup) && connected()) })}</div>
+    ${!connected() ? '<div class="hint" style="text-align:right">Вікно гри не підключено.</div>' : ''}</div>${gameNote}</div>`;
 }
 
 /* ---------- сценарій кроку ---------- */
@@ -404,16 +431,14 @@ IN.radio = s => {
     <div style="margin-top:10px">${codesBlock('radioOpinion', it => act('mark', it.id, it.label, { cls: s.marks.includes(it.id) ? 'sel' : '' }))}</div>`;
   return '';
 };
-// Дружба — листи з порадами: текст листа, один код (з повними описами й еталонами цього листа), «Порада коротко»
+// Дружба — листи з порадами: текст листа й один код (з повними описами й еталонами цього листа)
 IN.friend = s => {
   if (s.step !== 'letter' && s.step !== 'reply') return '';
-  const C = ctx().C, Lt = C.letters[s.li], gr = S.setup.group, max = CONFIG.thresholds.friend.tipMax;
+  const C = ctx().C, Lt = C.letters[s.li], gr = S.setup.group;
   const letter = `<div class="letter"><div class="lbl">Лист ${s.li + 1} з ${C.letters.length} · ${esc(Lt.title)}${gr === '78' ? ' — читай уголос' : ' — дитина читає сама, якщо важко — читаєш ти'}</div>«${esc(T(Lt.text))}» <i>— ${esc(Lt.from)}</i></div>`;
-  const tip = `<div class="lbl" style="margin-top:12px">Порада коротко <span style="text-transform:none;letter-spacing:0;font-weight:600">— необов’язково, до ${max} символів; побачить дитина після «Надіслати пораду»</span></div>
-    <input class="inp" id="f-tip" data-tip="1" maxlength="${max}" value="${esc(s.tips[s.li] || '')}" placeholder="суть поради словами дитини" style="max-width:560px">`;
-  if (s.step === 'letter') return letter + codesBlock('friendAdvice', it => act('code', it.id, `<span class="advice"><b>${esc(T(it.label))} · ${it.v}</b><span class="hint">${esc(T(it.desc))}</span></span>`, { cls: s.codes[s.li] === it.id ? 'sel' : '' }), it => Lt.ex[it.id]) + tip;
+  if (s.step === 'letter') return letter + codesBlock('friendAdvice', it => act('code', it.id, `<span class="advice"><b>${esc(T(it.label))} · ${it.v}</b><span class="hint">${esc(T(it.desc))}</span></span>`, { cls: s.codes[s.li] === it.id ? 'sel' : '' }), it => Lt.ex[it.id]);
   const c = adviceCode(s.codes[s.li]);
-  return `<div class="info">Порада надіслана${c ? ` · код: <b>${esc(c.label)} (${c.v})</b>` : ''}. На екрані дитини: <b id="thx">${esc(T(friendThanks(S, s, gr)))}</b></div>` + tip;
+  return `<div class="info">Порада надіслана${c ? ` · код: <b>${esc(c.label)} (${c.v})</b>` : ''}. На екрані дитини: <b>${esc(T(friendThanks(S, s, gr)))}</b></div>`;
 };
 IN.final = s => {
   if (s.step !== 'batteries') return '';
@@ -563,6 +588,7 @@ function viewReport() {
   const html = `<div class="rp-top no-print" data-html2canvas-ignore="true"><span class="nm">${esc(S.setup.name)}</span><span class="ttl">Титул: ${esc(skillOf(tk).title)}</span><div class="marks">${marks}</div></div>
     <div class="rp" id="report"><div class="rp-brand">${esc(RPT.brand)}</div><h1>${esc(RPT.title)}</h1>
     <dl class="rp-meta">${meta.map(([a, z]) => `<div><dt>${a}</dt><dd>${z}</dd></div>`).join('')}</dl>
+    ${sec(esc(CONFIG.parentQuiz.report.title), quizSentences(S).length ? `<p>${quizSentences(S).map(esc).join(' ')}</p>` : '', 'rp-sec-quiz')}
     ${sec(esc(fill(RPT.chosenTitle, { list: chosenNames(S).join(', ') })), chEv.length ? `<div class="rp-skills rp-chosen">${chEv.map(k => rpSkill(k, L[k], true)).join('')}</div>` : `<p>${esc(RPT.chosenNone)}</p>`, 'rp-sec-chosen')}
     ${sec(esc(RPT.coreTitle), core.length ? `<p class="rp-note">${esc(RPT.coreNote)}</p><div class="rp-skills">${core.map(k => rpSkill(k, L[k], false)).join('')}</div>` : '', 'rp-sec-core')}
     ${sec('Профіль навичок', AS.length ? `<div class="rp-profile"><div>${AS.length >= 3 ? radarSVG(L, AS) : barsHTML(L, AS)}</div>
@@ -633,6 +659,7 @@ function render() {
   renderHeader();
   const app = $('#app');
   if (S.phase === 'setup') { app.innerHTML = viewSetup(); emojify(app); return; }
+  if (S.phase === 'quiz' && S.quiz) { app.innerHTML = viewQuiz(); emojify(app); return; }
   if (S.phase === 'report' && ui.view !== 'lesson') { app.innerHTML = viewReport(); emojify(app); sheetOnReport(); return; }
   app.innerHTML = viewLesson(); emojify(app);
 }
@@ -651,16 +678,22 @@ function doUndo() {
 }
 const GA = {
   menu() { ui.menu = !ui.menu; renderHeader(); },
-  reset() { if (!armed('reset')) { renderHeader(); return; } const snd = S.sound; S = freshState(snd); applyUrlTopics(); ui.undo = []; ui.menu = false; ui.view = null; commit(); },
+  reset() { if (!armed('reset')) { renderHeader(); return; } const snd = S.sound; S = freshState(snd); ui.undo = []; ui.menu = false; ui.view = null; commit(); },
+  quiz() { if (!childOk() || !connected()) return; A.quiz(S, URL_TOPICS); ui.qWarn = false; commit(); },
+  qans(id) { const r = A.qAnswer(S, id); clearTimeout(ui.qwT); ui.qWarn = r === 'max'; if (ui.qWarn) ui.qwT = setTimeout(() => { ui.qWarn = false; render(); }, 3500); commit(); },
+  qnext() { A.qNext(S); ui.qWarn = false; commit(); },
+  qback() { A.qBack(S); ui.qWarn = false; commit(); },
+  qnone() { A.qNoParents(S); commit(); },
+  qedit() { A.qEdit(S); commit(); },
+  qgo() { if (!connected() || !topicsOk(S.setup)) return; A.start(S); ui.undo = []; commit(); },
   topic(k) {
-    if (S.phase !== 'setup') return;
+    if (S.phase !== 'setup' && S.phase !== 'quiz') return;
     const r = toggleTopic(S.setup, k); clearTimeout(ui.twT);
     ui.topicWarn = r === 'max'; if (ui.topicWarn) ui.twT = setTimeout(() => { ui.topicWarn = false; render(); }, 3500);
     commit();
   },
   openGame() { openGame(); },
   sound() { S.sound = !S.sound; commit(); },
-  start() { if (!connected() || !setupOk()) return; A.start(S); ui.undo = []; commit(); },
   next() { A.next(S); ui.undo = []; if (S.phase === 'report') ui.view = null; commit(); },
   undo() { doUndo(); },
   skipProbe() { if (!armed('skipProbe')) { render(); return; } A.skipProbe(S); ui.undo = []; commit(); },
@@ -678,7 +711,7 @@ document.addEventListener('click', e => {
   if (el.dataset.set) { const k = el.dataset.set, v = el.dataset.arg; S.setup[k] = k === 'age' ? +v : v; if (k === 'group' && !CONFIG.groups[v].ages.includes(S.setup.age)) S.setup.age = null; commit(); return; }
   if (el.dataset.g) {
     const fn = el.dataset.g;
-    if (['next', 'skipProbe', 'skipStation', 'start'].includes(fn) && ui.arm !== fn) { const now = Date.now(); if (now - ui.lastT < 450) return; ui.lastT = now; }
+    if (['next', 'skipProbe', 'skipStation', 'start', 'quiz', 'qnext', 'qgo', 'qback'].includes(fn) && ui.arm !== fn) { const now = Date.now(); if (now - ui.lastT < 450) return; ui.lastT = now; }
     GA[fn](el.dataset.arg); return;
   }
   doAct(el.dataset.act, el.dataset.arg);
@@ -693,11 +726,10 @@ function doAct(name, arg) {
 }
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.dataset.tip) { A.act(S, 'tip', t.value); SYNC.publish(S); const th = document.getElementById('thx'); if (th) th.textContent = T(friendThanks(S, S.st.friend, S.setup.group)); return; }
   if (t.dataset.guest) { A.act(S, 'guest', t.value); SYNC.publish(S); const nb = document.querySelector('[data-g="next"]'); if (nb) nb.disabled = !ST.radio.canNext(S.st.radio); return; }
   const k = t.dataset.bind; if (!k) return;
   S.setup[k] = t.value; SYNC.publish(S);
-  const btn = document.querySelector('[data-g="start"]'); if (btn) btn.disabled = !(setupOk() && connected());
+  const btn = document.querySelector('[data-g="quiz"]'); if (btn) btn.disabled = !(childOk() && connected());
 });
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -712,7 +744,7 @@ setInterval(() => {
   if (A.tick(S)) { ui.undo = []; commit(); }
   document.querySelectorAll('.timer[data-ends]').forEach(el => { el.textContent = fmtTime(Math.ceil(Math.max(0, (+el.dataset.ends - Date.now()) / 1000))); });
   const t = $('#total'); if (t && S.t.lessonStart) t.textContent = `${Math.floor(((S.t.lessonEnd || Date.now()) - S.t.lessonStart) / 60000)} хв з ≈${planOf(routeOfS(S))}`;
-  const c = $('#conn'), on = connected() && !(ui.gameVer && ui.gameVer !== CONFIG.version); if (c && c.classList.contains('on') !== on) { renderHeader(); if (S.phase === 'setup') render(); }
+  const c = $('#conn'), on = connected() && !(ui.gameVer && ui.gameVer !== CONFIG.version); if (c && c.classList.contains('on') !== on) { renderHeader(); if (S.phase === 'setup' || S.phase === 'quiz') render(); }
 }, 250);
 
 render();
@@ -725,6 +757,10 @@ function reportTests(eq, mk, D) {
   const X = mk('78', 'final', 'f', ['druzhba', 'vpevnenist']); X.st.emotions = D.e1.S.st.emotions; X.st.friend = D.f8.s; X.st.radio = { done: true, skipped: true, step: 'done' }; X.self.friend = 2; X.phase = 'report';
   const h = reportFor(X), t = text(h), at = s => t.indexOf(s);
   eq('Звіт: перший розділ — «Ви обрали: Впевненість, Дружба», далі «Базові навички», «Що ще розвиває курс»', [/<section[^>]*><h2>1\. Ви обрали: Впевненість, Дружба<\/h2>/.test(h), at('Ви обрали') < at('Базові навички'), at('Базові навички') < at('Що ще розвиває курс')], [true, true, true]);
+  { const Q = JSON.parse(JSON.stringify(X)); Q.quiz = { step: 'summary', qi: 2, ans: [['friends'], ['newkids'], ['approach']], skipped: null, suggested: ['druzhba'], edit: false };
+    const hq = reportFor(Q), tq = text(hq);
+    eq('Звіт: після квізу перший розділ — «Ви розповіли, що вам найважливіше», далі «Ви обрали»', [/<h2>1\. Ви розповіли, що вам найважливіше<\/h2>/.test(hq), /<h2>2\. Ви обрали: Впевненість, Дружба<\/h2>/.test(hq), tq.includes('Ви хотіли б, щоб Олеся вміла знайомитися й дружити з іншими дітьми і впевненіше почувалася з новими дітьми.')], [true, true, true]);
+    Q.quiz.skipped = 'noParents'; eq('Звіт: квіз пропущено — розділу немає', /Ви розповіли/.test(reportFor(Q)), false); }
   eq('Звіт: обрана Дружба — докладно, з модулем курсу', [/id="sk-friend"/.test(h.split('rp-sec-core')[0]), t.includes('Дружба → модуль «Майстер дружби»'), t.includes('Як це проявляється вдома й у школі')], [true, true, true]);
   const more = t.slice(at('Що ще розвиває курс'));
   eq('Звіт: невибрані й пропущена обрана (Впевненість) — «Цю навичку ми розглянемо на курсі»', [(more.match(/Цю навичку ми розглянемо на курсі/g) || []).length, more.includes('Впевненість —'), more.includes('Гроші —'), more.includes('модуль «Скарбничка»')], [6, true, true, true]);
